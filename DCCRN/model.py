@@ -331,7 +331,6 @@ class DCCRN(nn.Layer):
 
         # mask
         mask = F.pad(out, [0, 0, 1, 0])
-        mask = paddle.clip(mask, min=0, max=1.0)
         enh_spec_real = mask[:, 0, :, :] * noisy_spec_real - mask[:, 1, :, :] * noisy_spec_imag
         enh_spec_imag = mask[:, 1, :, :] * noisy_spec_real + mask[:, 0, :, :] * noisy_spec_imag
         enh_spec = paddle.squeeze(enh_spec_real + 1j * enh_spec_imag, axis=1)
@@ -339,6 +338,7 @@ class DCCRN(nn.Layer):
         # istft
         # [B, S]
         enh = istft(enh_spec, self.n_fft, hop_length=self.hop_len, win_length=self.win_len, window=self.window)
+        enh = paddle.clip(enh, min=-1.0, max=1.0)
 
         return enh
 
