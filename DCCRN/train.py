@@ -286,7 +286,7 @@ class Trainer:
 
             # train
             self.set_model_to_train_mode()
-            # self.train_epoch(epoch)
+            self.train_epoch(epoch)
 
             if self.save_checkpoint_interval != 0 and (epoch % self.save_checkpoint_interval == 0):
                 self.save_checkpoint(epoch)
