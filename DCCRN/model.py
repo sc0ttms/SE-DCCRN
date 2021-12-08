@@ -14,6 +14,7 @@ from paddle.nn.initializer import Constant, Normal
 
 sys.path.append(os.getcwd())
 from audio.feature import offline_laplace_norm, cumulative_laplace_norm
+from audio.mask import decompress_cIRM
 from audio.metrics import SI_SDR
 
 
@@ -331,6 +332,7 @@ class DCCRN(nn.Layer):
 
         # mask
         cRM = F.pad(out, [0, 0, 1, 0])
+        cRM = decompress_cIRM(cRM)
         enh_spec_real = cRM[:, 0, :, :] * noisy_spec_real - cRM[:, 1, :, :] * noisy_spec_imag
         enh_spec_imag = cRM[:, 1, :, :] * noisy_spec_real + cRM[:, 0, :, :] * noisy_spec_imag
         enh_spec = paddle.squeeze(enh_spec_real + 1j * enh_spec_imag, axis=1)
