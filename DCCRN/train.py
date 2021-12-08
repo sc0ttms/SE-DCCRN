@@ -263,10 +263,10 @@ class Trainer:
             enh = enh.detach().squeeze(0).cpu().numpy()
             assert len(noisy) == len(clean) == len(enh)
 
-            noisy_list = noisy if noisy_list == [] else np.concatenate([noisy_list, noisy], axis=0)
-            clean_list = clean if clean_list == [] else np.concatenate([clean_list, clean], axis=0)
-            enh_list = enh if enh_list == [] else np.concatenate([enh_list, enh], axis=0)
-            noisy_files = noisy_file if noisy_files == [] else np.concatenate([noisy_files, noisy_file], axis=0)
+            noisy_list = np.concatenate([noisy_list, noisy], axis=0) if len(noisy_list) else noisy
+            clean_list = np.concatenate([clean_list, clean], axis=0) if len(clean_list) else clean
+            enh_list = np.concatenate([enh_list, enh], axis=0) if len(enh_list) else enh
+            noisy_files = np.concatenate([noisy_files, noisy_file], axis=0) if len(noisy_files) else noisy_file
 
         # visual audio
         for i in range(self.audio_visual_samples):
@@ -286,7 +286,7 @@ class Trainer:
 
             # train
             self.set_model_to_train_mode()
-            self.train_epoch(epoch)
+            # self.train_epoch(epoch)
 
             if self.save_checkpoint_interval != 0 and (epoch % self.save_checkpoint_interval == 0):
                 self.save_checkpoint(epoch)
