@@ -28,12 +28,12 @@ look_ahead = 1
 [train]
 use_amp = true
 resume = false
-n_jobs = 1
+n_jobs = 8
 optimizer = "Adam"
 lr = 1e-3
 epochs = 9999
 save_checkpoint_interval = 1
-valid_interval = 1
+valid_interval = 5
 clip_grad_norm_value = 10.0
 audio_visual_samples = 3
 
