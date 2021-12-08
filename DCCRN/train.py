@@ -245,10 +245,10 @@ class Trainer:
         self.writer.add_scalar("loss/train", loss_total / len(self.train_iter), epoch)
 
     def valid_epoch(self, epoch):
-        audio_visual_samples_num = 0
         noisy_list = []
         clean_list = []
         enh_list = []
+        noisy_files = []
 
         loss_total = 0.0
         for noisy, clean, noisy_file in tqdm(self.valid_iter, desc="valid"):
@@ -263,13 +263,14 @@ class Trainer:
             enh = enh.detach().squeeze(0).cpu().numpy()
             assert len(noisy) == len(clean) == len(enh)
 
-            audio_visual_samples_num += 1
-            if audio_visual_samples_num <= self.audio_visual_samples:
-                self.audio_visualization(noisy, clean, enh, os.path.basename(noisy_file[0]), epoch)
+            noisy_list = noisy if noisy_list == [] else np.concatenate([noisy_list, noisy], axis=0)
+            clean_list = clean if clean_list == [] else np.concatenate([clean_list, clean], axis=0)
+            enh_list = enh if enh_list == [] else np.concatenate([enh_list, enh], axis=0)
+            noisy_files = noisy_file if noisy_files == [] else np.concatenate([noisy_files, noisy_file], axis=0)
 
-            noisy_list.append(noisy)
-            clean_list.append(clean)
-            enh_list.append(enh)
+        # visual audio
+        for i in range(self.audio_visual_samples):
+            self.audio_visualization(noisy_list[i], clean_list[i], enh_list[i], os.path.basename(noisy_files[i]), epoch)
 
         # logs
         self.writer.add_scalar("loss/valid", loss_total / len(self.valid_iter), epoch)
@@ -341,7 +342,7 @@ if __name__ == "__main__":
     valid_set = DNS_Dataset(dataset_path, config, mode="valid")
     valid_iter = DataLoader(
         valid_set,
-        batch_size=1,
+        batch_size=4,
         shuffle=False,
         num_workers=num_workers,
         drop_last=drop_last,
