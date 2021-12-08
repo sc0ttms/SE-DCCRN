@@ -152,7 +152,9 @@ class Trainer:
                 f"max: {np.max(mag):.3f}, "
                 f"min: {np.min(mag):.3f}"
             )
-            librosa.display.specshow(librosa.amplitude_to_db(mag), cmap="magma", y_axis="linear", ax=axes[k], sr=16000)
+            librosa.display.specshow(
+                librosa.amplitude_to_db(mag, ref=np.max), cmap="magma", y_axis="linear", ax=axes[k], sr=16000
+            )
         plt.tight_layout()
         self.writer.add_figure(f"spec/{name}", fig, epoch)
 

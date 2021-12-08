@@ -308,12 +308,12 @@ class DCCRN(nn.Layer):
         assert num_channels == 2
 
         # norm
-        # if self.mode in ["train", "valid"]:
-        #     # [B, 2, F, T]
-        #     out = offline_laplace_norm(out)
-        # else:
-        #     # [B, 2, F, T]
-        #     out = cumulative_laplace_norm(out)
+        if self.mode in ["train", "valid"]:
+            # [B, 2, F, T]
+            out = offline_laplace_norm(out)
+        else:
+            # [B, 2, F, T]
+            out = cumulative_laplace_norm(out)
 
         # encoder
         encoder_out = []
