@@ -344,7 +344,7 @@ if __name__ == "__main__":
     valid_set = DNS_Dataset(dataset_path, config, mode="valid")
     valid_iter = DataLoader(
         valid_set,
-        batch_size=4,
+        batch_size=8,
         shuffle=False,
         num_workers=num_workers,
         drop_last=drop_last,
