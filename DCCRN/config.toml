@@ -1,0 +1,41 @@
+[random]
+seed = 0
+
+[path]
+# base = "./output/DCCRN"
+base = "/model/DCCRN"
+
+[dataloader]
+batch_size = 10
+num_workers = 8
+drop_last = false
+
+[dataset]
+sr = 16000
+n_fft = 512
+win_len = 480
+hop_len = 120
+audio_len = 3.0
+limit = 0
+
+[model]
+encoder_decoder_num_channels = [2, 32, 64, 128, 256, 256, 256]
+encoder_decoder_kernel_size = [5, 2]
+rnn_hidden_size = 256
+rnn_num_layers = 2
+look_ahead = 1
+
+[train]
+use_amp = true
+resume = false
+n_jobs = 1
+optimizer = "Adam"
+lr = 1e-3
+epochs = 9999
+save_checkpoint_interval = 1
+valid_interval = 1
+clip_grad_norm_value = 10.0
+audio_visual_samples = 3
+
+[inference]
+audio_visual_samples = 3

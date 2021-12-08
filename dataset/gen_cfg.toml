@@ -1,0 +1,15 @@
+[random]
+seed = 0
+
+[path]
+# local pc
+# dataset = "D:/ML/datasets/dns_interspeech_2021_mandarin_1h"
+# aistudio
+# dataset = "../../data/data119056/dns_interspeech_2021_mandarin_100h"
+# openi
+dataset = "/dataset"
+
+[dataset]
+audio_format = "wav"
+valid_ratio = 0.1
+test_ratio = 0.1

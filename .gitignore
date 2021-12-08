@@ -1,0 +1,8 @@
+# py_venv
+py_venv/
+
+# python
+*.pyc
+
+# vscode
+.vscode/
