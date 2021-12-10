@@ -45,6 +45,7 @@ class Trainer:
         # get train args
         self.use_amp = False if device == "cpu" else config["train"]["use_amp"]
         self.resume = config["train"]["resume"]
+        self.n_folds = config["train"]["n_folds"]
         self.n_jobs = config["train"]["n_jobs"]
         self.epochs = config["train"]["epochs"]
         self.save_checkpoint_interval = config["train"]["save_checkpoint_interval"]
@@ -163,7 +164,7 @@ class Trainer:
         plt.tight_layout()
         self.writer.add_figure(f"spec/{name}", fig, epoch)
 
-    def metrics_visualization(self, noisy_list, clean_list, enh_list, epoch, n_fold=4, n_jobs=8):
+    def metrics_visualization(self, noisy_list, clean_list, enh_list, epoch, n_folds=1, n_jobs=8):
         score = {
             "noisy": {
                 "STOI": [],
@@ -175,8 +176,8 @@ class Trainer:
             },
         }
 
-        split_num = len(noisy_list) // n_fold
-        for n in range(n_fold):
+        split_num = len(noisy_list) // n_folds
+        for n in range(n_folds):
             noisy_stoi_score = Parallel(n_jobs=n_jobs)(
                 delayed(STOI)(noisy, clean)
                 for noisy, clean in tqdm(
@@ -286,7 +287,9 @@ class Trainer:
         self.writer.add_scalar("loss/valid", loss_total / len(self.valid_iter), epoch)
 
         # visual metrics and get valid score
-        metrics_score = self.metrics_visualization(noisy_list, clean_list, enh_list, epoch, n_jobs=self.n_jobs)
+        metrics_score = self.metrics_visualization(
+            noisy_list, clean_list, enh_list, epoch, n_folds=self.n_folds, n_jobs=self.n_jobs
+        )
 
         return metrics_score
 
