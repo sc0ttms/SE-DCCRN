@@ -28,6 +28,7 @@ look_ahead = 1
 [train]
 use_amp = true
 resume = false
+n_folds = 1
 n_jobs = 8
 optimizer = "Adam"
 lr = 1e-3
