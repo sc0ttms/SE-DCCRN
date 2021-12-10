@@ -223,7 +223,7 @@ class Trainer:
         hparams_dict = {
             "lr": self.optimizer.get_lr(),
         }
-        metrics_list = ["STOI/valid/noisy", "STOI/valid/enh", "WB_PESQ/valid/noisy", "WB_PESQ/valid/enh"]
+        metrics_list = ["lr", "STOI/valid/noisy", "STOI/valid/enh", "WB_PESQ/valid/noisy", "WB_PESQ/valid/enh"]
         self.writer.add_hparams(
             hparams_dict=hparams_dict,
             metrics_list=metrics_list,
@@ -251,6 +251,7 @@ class Trainer:
 
         # logs
         self.writer.add_scalar("loss/train", loss_total / len(self.train_iter), epoch)
+        self.writer.add_scalar("lr", self.optimizer.get_lr(), epoch)
 
     def valid_epoch(self, epoch):
         noisy_list = []
