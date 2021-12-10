@@ -362,7 +362,7 @@ if __name__ == "__main__":
         paddle.summary(
             model,
             input_size=(
-                config["dataloader"]["batch_size"],
+                config["dataloader"]["batch_size"][0],
                 int(config["dataset"]["sr"] * config["dataset"]["audio_len"]),
             ),
         )

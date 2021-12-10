@@ -346,7 +346,7 @@ if __name__ == "__main__":
     train_set = DNS_Dataset(dataset_path, config, mode="train")
     train_iter = DataLoader(
         train_set,
-        batch_size=batch_size,
+        batch_size=batch_size[0],
         shuffle=True,
         num_workers=num_workers,
         drop_last=drop_last,
@@ -356,7 +356,7 @@ if __name__ == "__main__":
     valid_set = DNS_Dataset(dataset_path, config, mode="valid")
     valid_iter = DataLoader(
         valid_set,
-        batch_size=8,
+        batch_size=batch_size[1],
         shuffle=False,
         num_workers=num_workers,
         drop_last=drop_last,
