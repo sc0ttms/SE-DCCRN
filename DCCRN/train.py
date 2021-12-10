@@ -131,7 +131,7 @@ class Trainer:
         print(f"Model checkpoint loaded. Training will begin at {self.start_epoch} epoch.")
 
     def print_networks(self):
-        input_size = (self.batch_size, int(self.sr * self.audio_len))
+        input_size = (self.batch_size[0], int(self.sr * self.audio_len))
         print(paddle.summary(self.model, input_size=input_size))
 
     def is_best_epoch(self, score):
