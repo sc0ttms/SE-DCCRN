@@ -6,7 +6,7 @@ seed = 0
 base = "/model/DCCRN"
 
 [dataloader]
-batch_size = 10
+batch_size = 85
 num_workers = 8
 drop_last = false
 
