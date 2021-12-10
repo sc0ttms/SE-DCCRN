@@ -66,9 +66,12 @@ class Trainer:
         self.valid_iter = valid_iter
 
         # config optimizer
+        self.scheduler = paddle.optimizer.lr.ReduceOnPlateau(
+            learning_rate=config["train"]["lr"], factor=0.5, patience=1, verbose=False
+        )
         self.optimizer = getattr(paddle.optimizer, config["train"]["optimizer"])(
             parameters=model.parameters(),
-            learning_rate=config["train"]["lr"],
+            learning_rate=self.scheduler,
             grad_clip=nn.ClipGradByNorm(clip_norm=config["train"]["clip_grad_norm_value"]),
         )
 
@@ -99,6 +102,7 @@ class Trainer:
             "epoch": epoch,
             "best_score": self.best_score,
             "model": self.model.state_dict(),
+            "scheduler": self.scheduler.state_dict(),
             "optimizer": self.optimizer.state_dict(),
             "scaler": self.scaler.state_dict(),
         }
@@ -118,6 +122,7 @@ class Trainer:
 
         self.start_epoch = checkpoint["epoch"] + 1
         self.best_score = checkpoint["best_score"]
+        self.scheduler.set_state_dict(checkpoint["scheduler"])
         self.optimizer.set_state_dict(checkpoint["optimizer"])
         self.model.set_state_dict(checkpoint["model"])
         self.scaler.load_state_dict(checkpoint["scaler"])
@@ -269,6 +274,9 @@ class Trainer:
             clean_list = np.concatenate([clean_list, clean], axis=0) if len(clean_list) else clean
             enh_list = np.concatenate([enh_list, enh], axis=0) if len(enh_list) else enh
             noisy_files = np.concatenate([noisy_files, noisy_file], axis=0) if len(noisy_files) else noisy_file
+
+        # update learning rate
+        self.scheduler.step(loss_total / len(self.valid_iter))
 
         # visual audio
         for i in range(self.audio_visual_samples):
