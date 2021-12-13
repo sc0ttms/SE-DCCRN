@@ -27,7 +27,7 @@ plt.switch_backend("agg")
 class Inferencer:
     def __init__(self, model, test_iter, config):
         # set path
-        base_path = config["path"]["base"]
+        base_path = os.path.abspath(config["path"]["base"])
         os.makedirs(base_path, exist_ok=True)
         # get checkpoints path
         self.checkpoints_path = os.path.join(base_path, "checkpoints")
