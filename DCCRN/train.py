@@ -68,7 +68,7 @@ class Trainer:
 
         # config optimizer
         self.scheduler = paddle.optimizer.lr.ReduceOnPlateau(
-            learning_rate=config["train"]["lr"], factor=0.5, patience=1, verbose=False
+            learning_rate=config["train"]["lr"], factor=0.5, patience=0, verbose=False
         )
         self.optimizer = getattr(paddle.optimizer, config["train"]["optimizer"])(
             parameters=model.parameters(),
