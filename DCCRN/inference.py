@@ -3,6 +3,7 @@
 import sys
 import os
 import toml
+import pandas as pd
 import librosa
 import librosa.display
 import matplotlib.pyplot as plt
@@ -17,8 +18,8 @@ from visualdl import LogWriter
 sys.path.append("./")
 from DCCRN.model import DCCRN
 from dataset.dataset import DNS_Dataset
+from dataset.compute_metrics import compute_metric
 from audio.feature import is_clipped
-from audio.metrics import STOI, WB_PESQ
 from audio.utils import prepare_empty_path
 
 plt.switch_backend("agg")
@@ -35,7 +36,9 @@ class Inferencer:
         self.output_path = os.path.join(base_path, "enhanced")
         # get logs path
         self.logs_path = os.path.join(base_path, "logs", "inference")
-        prepare_empty_path([self.output_path, self.logs_path])
+        # get metrics path
+        self.metrics_path = os.path.join(base_path, "metrics")
+        prepare_empty_path([self.output_path, self.logs_path, self.metrics_path])
 
         # set iter
         self.test_iter = test_iter
@@ -108,58 +111,28 @@ class Inferencer:
         plt.tight_layout()
         self.writer.add_figure(f"spec/{name}", fig, epoch)
 
-    def metrics_visualization(self, noisy_list, clean_list, enh_list, epoch, n_folds=1, n_jobs=8):
-        score = {
-            "noisy": {
-                "STOI": [],
-                "WB_PESQ": [],
-            },
-            "enh": {
-                "STOI": [],
-                "WB_PESQ": [],
-            },
+    def save_metrics(self, enh_list, clean_list, n_folds=1, n_jobs=8):
+        # get metrics
+        metrics = {
+            "SI_SDR": [],
+            "STOI": [],
+            "WB_PESQ": [],
+            "NB_PESQ": [],
         }
 
-        split_num = len(noisy_list) // n_folds
-        for n in range(n_folds):
-            noisy_stoi_score = Parallel(n_jobs=n_jobs)(
-                delayed(STOI)(noisy, clean)
-                for noisy, clean in tqdm(
-                    zip(
-                        noisy_list[n * split_num : (n + 1) * split_num], clean_list[n * split_num : (n + 1) * split_num]
-                    )
-                )
-            )
-            enh_stoi_score = Parallel(n_jobs=n_jobs)(
-                delayed(STOI)(noisy, clean)
-                for noisy, clean in tqdm(
-                    zip(enh_list[n * split_num : (n + 1) * split_num], clean_list[n * split_num : (n + 1) * split_num])
-                )
-            )
-            score["noisy"]["STOI"].append(np.mean(noisy_stoi_score))
-            score["enh"]["STOI"].append(np.mean(enh_stoi_score))
+        # compute enh metrics
+        compute_metric(
+            enh_list,
+            clean_list,
+            metrics,
+            n_folds=n_folds,
+            n_jobs=n_jobs,
+            pre_load=True,
+        )
 
-            noisy_wb_pesq_score = Parallel(n_jobs=n_jobs)(
-                delayed(WB_PESQ)(noisy, clean)
-                for noisy, clean in tqdm(
-                    zip(
-                        noisy_list[n * split_num : (n + 1) * split_num], clean_list[n * split_num : (n + 1) * split_num]
-                    )
-                )
-            )
-            enh_wb_pesq_score = Parallel(n_jobs=n_jobs)(
-                delayed(WB_PESQ)(noisy, clean)
-                for noisy, clean in tqdm(
-                    zip(enh_list[n * split_num : (n + 1) * split_num], clean_list[n * split_num : (n + 1) * split_num])
-                )
-            )
-            score["noisy"]["WB_PESQ"].append(np.mean(noisy_wb_pesq_score))
-            score["enh"]["WB_PESQ"].append(np.mean(enh_wb_pesq_score))
-
-        self.writer.add_scalar("STOI/test/noisy", np.mean(score["noisy"]["STOI"]), epoch)
-        self.writer.add_scalar("STOI/test/enh", np.mean(score["enh"]["STOI"]), epoch)
-        self.writer.add_scalar("WB_PESQ/test/noisy", np.mean(score["noisy"]["WB_PESQ"]), epoch)
-        self.writer.add_scalar("WB_PESQ/test/enh", np.mean(score["enh"]["WB_PESQ"]), epoch)
+        # save train metrics
+        df = pd.DataFrame(metrics, index=["enh"])
+        df.to_csv(os.path.join(self.metrics_path, "enh_metrics.csv"))
 
     def save_audio(self, audio_list, audio_files, n_folds=1, n_jobs=8):
         split_num = len(audio_list) // n_folds
@@ -209,7 +182,7 @@ class Inferencer:
             self.audio_visualization(noisy_list[i], clean_list[i], enh_list[i], os.path.basename(noisy_files[i]), 1)
 
         # visual metrics and get valid score
-        self.metrics_visualization(noisy_list, clean_list, enh_list, 1, n_folds=self.n_folds, n_jobs=self.n_jobs)
+        self.save_metrics(enh_list, clean_list, n_folds=self.n_folds, n_jobs=self.n_jobs)
         # save audio
         self.save_audio(enh_list, enh_files, n_folds=self.n_folds, n_jobs=self.n_jobs)
 
