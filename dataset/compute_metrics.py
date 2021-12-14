@@ -34,20 +34,30 @@ def calculate_metric(noisy_file, clean_file, sr=16000, metric_type="STOI", pre_l
         return NB_PESQ(noisy, clean)
 
 
-def compute_metric(noisy_files, clean_files, metrics, n_jobs=8):
+def compute_metric(noisy_files, clean_files, metrics, n_folds=1, n_jobs=8, pre_load=False):
     for metric_type, _ in metrics.items():
         assert metric_type in REGISTERED_METRICS
 
-        metric_score = Parallel(n_jobs=n_jobs)(
-            delayed(calculate_metric)(
-                noisy_file,
-                clean_file,
-                sr=8000 if metric_type in ["NB_PESQ"] else 16000,
-                metric_type=metric_type,
+        split_num = len(noisy_files) // n_folds
+        score = []
+        for n in range(n_folds):
+            metric_score = Parallel(n_jobs=n_jobs)(
+                delayed(calculate_metric)(
+                    noisy_file,
+                    clean_file,
+                    sr=8000 if metric_type in ["NB_PESQ"] else 16000,
+                    metric_type=metric_type,
+                    pre_load=pre_load,
+                )
+                for noisy_file, clean_file in tqdm(
+                    zip(
+                        noisy_files[n * split_num : (n + 1) * split_num],
+                        clean_files[n * split_num : (n + 1) * split_num],
+                    )
+                )
             )
-            for noisy_file, clean_file in tqdm(zip(noisy_files, clean_files))
-        )
-        metrics[metric_type] = np.mean(metric_score)
+            score.append(np.mean(metric_score))
+        metrics[metric_type] = np.mean(score)
 
     return metrics
 
@@ -78,6 +88,7 @@ if __name__ == "__main__":
     toml_path = os.path.join(os.path.dirname(__file__), "compute_metrics_cfg.toml")
     config = toml.load(toml_path)
     # get n_jobs
+    n_folds = config["ppl"]["n_folds"]
     n_jobs = config["ppl"]["n_jobs"]
 
     # get metrics
@@ -89,19 +100,40 @@ if __name__ == "__main__":
     }
 
     # compute train metrics
-    train_metrics_score = compute_metric(train_noisy_files, train_clean_files, metrics, n_jobs=n_jobs)
+    train_metrics_score = compute_metric(
+        train_noisy_files,
+        train_clean_files,
+        metrics,
+        n_folds=n_folds,
+        n_jobs=n_jobs,
+        pre_load=False,
+    )
     # save train metrics
     df = pd.DataFrame(metrics, index=["train"])
     df.to_csv(os.path.join(dataset_path, "train_metrics.csv"))
 
     # compute valid metrics
-    train_metrics_score = compute_metric(valid_noisy_files, valid_clean_files, metrics, n_jobs=n_jobs)
+    train_metrics_score = compute_metric(
+        valid_noisy_files,
+        valid_clean_files,
+        metrics,
+        n_folds=n_folds,
+        n_jobs=n_jobs,
+        pre_load=False,
+    )
     # save train metrics
     df = pd.DataFrame(metrics, index=["valid"])
     df.to_csv(os.path.join(dataset_path, "valid_metrics.csv"))
 
     # compute test metrics
-    train_metrics_score = compute_metric(test_noisy_files, test_clean_files, metrics, n_jobs=n_jobs)
+    train_metrics_score = compute_metric(
+        test_noisy_files,
+        test_clean_files,
+        metrics,
+        n_folds=n_folds,
+        n_jobs=n_jobs,
+        pre_load=False,
+    )
     # save train metrics
     df = pd.DataFrame(metrics, index=["test"])
     df.to_csv(os.path.join(dataset_path, "test_metrics.csv"))
