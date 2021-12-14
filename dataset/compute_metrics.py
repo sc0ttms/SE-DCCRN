@@ -59,8 +59,6 @@ def compute_metric(noisy_files, clean_files, metrics, n_folds=1, n_jobs=8, pre_l
             score.append(np.mean(metric_score))
         metrics[metric_type] = np.mean(score)
 
-    return metrics
-
 
 if __name__ == "__main__":
     # get dataset path
@@ -100,7 +98,7 @@ if __name__ == "__main__":
     }
 
     # compute train metrics
-    train_metrics_score = compute_metric(
+    compute_metric(
         train_noisy_files,
         train_clean_files,
         metrics,
@@ -112,8 +110,16 @@ if __name__ == "__main__":
     df = pd.DataFrame(metrics, index=["train"])
     df.to_csv(os.path.join(dataset_path, "train_metrics.csv"))
 
+    # get metrics
+    metrics = {
+        "SI_SDR": [],
+        "STOI": [],
+        "WB_PESQ": [],
+        "NB_PESQ": [],
+    }
+
     # compute valid metrics
-    train_metrics_score = compute_metric(
+    compute_metric(
         valid_noisy_files,
         valid_clean_files,
         metrics,
@@ -125,8 +131,16 @@ if __name__ == "__main__":
     df = pd.DataFrame(metrics, index=["valid"])
     df.to_csv(os.path.join(dataset_path, "valid_metrics.csv"))
 
+    # get metrics
+    metrics = {
+        "SI_SDR": [],
+        "STOI": [],
+        "WB_PESQ": [],
+        "NB_PESQ": [],
+    }
+
     # compute test metrics
-    train_metrics_score = compute_metric(
+    compute_metric(
         test_noisy_files,
         test_clean_files,
         metrics,
