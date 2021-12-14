@@ -106,3 +106,6 @@ def transform_pesq_range(pesq_score):
         pesq_score: transformed pesq score
     """
     return (pesq_score + 0.5) / 5
+
+
+REGISTERED_METRICS = ["SI_SDR", "STOI", "WB_PESQ", "NB_PESQ"]
