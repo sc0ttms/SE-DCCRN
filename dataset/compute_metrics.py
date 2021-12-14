@@ -13,10 +13,14 @@ sys.path.append(os.getcwd())
 from audio.metrics import SI_SDR, STOI, WB_PESQ, NB_PESQ, REGISTERED_METRICS
 
 
-def calculate_metric(noisy_file, clean_file, sr=16000, metric_type="STOI"):
+def calculate_metric(noisy_file, clean_file, sr=16000, metric_type="STOI", pre_load=False):
     # get noisy, clean
-    noisy, _ = librosa.load(noisy_file, sr=sr)
-    clean, _ = librosa.load(clean_file, sr=sr)
+    if pre_load == False:
+        noisy, _ = librosa.load(noisy_file, sr=sr)
+        clean, _ = librosa.load(clean_file, sr=sr)
+    else:
+        noisy = noisy_file
+        clean = clean_file
     assert len(noisy) == len(clean)
 
     # get metric score
