@@ -14,6 +14,7 @@ import paddle.nn as nn
 from paddle.io import DataLoader
 from paddle.amp import GradScaler, auto_cast
 from visualdl import LogWriter
+import paddleslim
 
 
 sys.path.append("./")
@@ -35,9 +36,6 @@ class Trainer:
         # get logs path
         self.logs_path = os.path.join(base_path, "logs", "train")
 
-        # get dataloader args
-        self.batch_size = config["dataloader"]["batch_size"]
-
         # get dataset args
         self.sr = config["dataset"]["sr"]
         self.audio_len = config["dataset"]["audio_len"]
@@ -51,6 +49,15 @@ class Trainer:
         self.save_checkpoint_interval = config["train"]["save_checkpoint_interval"]
         self.valid_interval = config["train"]["valid_interval"]
         self.audio_visual_samples = config["train"]["audio_visual_samples"]
+
+        # get qat args
+        self.qat_config = {
+            "weight_preprocess_type": None,
+            "activation_preprocess_type": None,
+            "weight_bits": config["qat"]["weight_bits"],
+            "activation_bits": config["qat"]["activation_bits"],
+            "quantizable_layer_type": config["qat"]["quantizable_layer_type"],
+        }
 
         # init common args
         self.start_epoch = 1
@@ -81,7 +88,7 @@ class Trainer:
 
         # resume
         if self.resume:
-            self.resume_checkpoint()
+            self.resume_checkpoint(qat_enable=config["qat"]["enable"])
 
         # config logs
         self.writer = LogWriter(
@@ -96,7 +103,7 @@ class Trainer:
         # print params
         self.print_networks()
 
-    def save_checkpoint(self, epoch, is_best_epoch=False):
+    def save_checkpoint(self, epoch, is_best_epoch=False, qat_enable=False):
         print(f"Saving {epoch} epoch model checkpoint...")
 
         state_dict = {
@@ -109,17 +116,32 @@ class Trainer:
         }
 
         # save latest_model.tar
-        paddle.save(state_dict, os.path.join(self.checkpoints_path, "latest_model.tar"))
+        paddle.save(
+            state_dict,
+            os.path.join(
+                self.checkpoints_path,
+                "qat_latest_model.tar" if qat_enable else "latest_model.tar",
+            ),
+        )
 
         # save best_model.tar
         if is_best_epoch:
-            paddle.save(state_dict, os.path.join(self.checkpoints_path, "best_model.tar"))
+            paddle.save(
+                state_dict,
+                os.path.join(
+                    self.checkpoints_path,
+                    "qat_best_model.tar" if qat_enable else "best_model.tar",
+                ),
+            )
 
-    def resume_checkpoint(self):
-        latest_model_path = os.path.join(self.checkpoints_path, "latest_model.tar")
-        assert os.path.exists(latest_model_path)
+    def resume_checkpoint(self, qat_enable=False):
+        if qat_enable:
+            model_path = os.path.join(self.checkpoints_path, "best_model.tar")
+        else:
+            model_path = os.path.join(self.checkpoints_path, "latest_model.tar")
+        assert os.path.exists(model_path)
 
-        checkpoint = paddle.load(latest_model_path)
+        checkpoint = paddle.load(model_path)
 
         self.start_epoch = checkpoint["epoch"] + 1
         self.best_score = checkpoint["best_score"]
@@ -128,10 +150,14 @@ class Trainer:
         self.model.set_state_dict(checkpoint["model"])
         self.scaler.load_state_dict(checkpoint["scaler"])
 
+        if qat_enable:
+            quanter = paddleslim.QAT(config=self.qat_config)
+            quanter.quantize(self.model)
+
         print(f"Model checkpoint loaded. Training will begin at {self.start_epoch} epoch.")
 
     def print_networks(self):
-        input_size = (self.batch_size[0], int(self.sr * self.audio_len))
+        input_size = (1, int(self.sr * self.audio_len))
         print(paddle.summary(self.model, input_size=input_size))
 
     def is_best_epoch(self, score):
