@@ -51,6 +51,8 @@ class Trainer:
         self.audio_visual_samples = config["train"]["audio_visual_samples"]
 
         # get qat args
+        self.qat_enable = config["qat"]["enable"]
+        self.qat_resume = config["qat"]["resume"]
         self.qat_config = {
             "weight_preprocess_type": None,
             "activation_preprocess_type": None,
@@ -89,8 +91,8 @@ class Trainer:
         # resume
         if self.resume:
             self.resume_checkpoint(
-                qat_enable=config["qat"]["enable"],
-                qat_resume=config["qat"]["resume"],
+                qat_enable=self.qat_enable,
+                qat_resume=self.qat_resume,
             )
 
         # config logs
@@ -300,7 +302,7 @@ class Trainer:
             self.train_epoch(epoch)
 
             if self.save_checkpoint_interval != 0 and (epoch % self.save_checkpoint_interval == 0):
-                self.save_checkpoint(epoch)
+                self.save_checkpoint(epoch, qat_enable=self.qat_enable)
 
             # valid
             if epoch % self.valid_interval == 0:
@@ -310,7 +312,7 @@ class Trainer:
                 metric_score = self.valid_epoch(epoch)
 
                 if self.is_best_epoch(metric_score):
-                    self.save_checkpoint(epoch, is_best_epoch=True)
+                    self.save_checkpoint(epoch, is_best_epoch=True, qat_enable=self.qat_enable)
 
             # logs hparams
             self.hparams_visualization()
