@@ -88,7 +88,10 @@ class Trainer:
 
         # resume
         if self.resume:
-            self.resume_checkpoint(qat_enable=config["qat"]["enable"])
+            self.resume_checkpoint(
+                qat_enable=config["qat"]["enable"],
+                qat_resume=config["qat"]["resume"],
+            )
 
         # config logs
         self.writer = LogWriter(
@@ -134,11 +137,12 @@ class Trainer:
                 ),
             )
 
-    def resume_checkpoint(self, qat_enable=False):
-        if qat_enable:
-            model_path = os.path.join(self.checkpoints_path, "best_model.tar")
-        else:
-            model_path = os.path.join(self.checkpoints_path, "latest_model.tar")
+    def resume_checkpoint(self, qat_enable=False, qat_resume=False):
+        model_path = os.path.join(
+            self.checkpoints_path,
+            "qat_best_model.tar" if qat_resume else "best_model.tar" if qat_enable else "latest_model.tar",
+        )
+
         assert os.path.exists(model_path)
 
         checkpoint = paddle.load(model_path)
@@ -150,7 +154,7 @@ class Trainer:
         self.model.set_state_dict(checkpoint["model"])
         self.scaler.load_state_dict(checkpoint["scaler"])
 
-        if qat_enable:
+        if qat_enable and qat_resume == False:
             quanter = paddleslim.QAT(config=self.qat_config)
             quanter.quantize(self.model)
 
