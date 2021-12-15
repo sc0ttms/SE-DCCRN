@@ -8,7 +8,6 @@ import librosa.display
 import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
-from joblib import Parallel, delayed
 import paddle
 import paddle.nn as nn
 from paddle.io import DataLoader
@@ -19,8 +18,9 @@ import paddleslim
 
 sys.path.append("./")
 from dataset.dataset import DNS_Dataset
+from dataset.compute_metrics import compute_metric
 from DCCRN.model import DCCRN
-from audio.metrics import STOI, WB_PESQ, transform_pesq_range
+from audio.metrics import transform_pesq_range
 from audio.utils import prepare_empty_path
 
 plt.switch_backend("agg")
@@ -190,66 +190,33 @@ class Trainer:
         plt.tight_layout()
         self.writer.add_figure(f"spec/{name}", fig, epoch)
 
-    def metrics_visualization(self, noisy_list, clean_list, enh_list, epoch, n_folds=1, n_jobs=8):
-        score = {
-            "noisy": {
-                "STOI": [],
-                "WB_PESQ": [],
-            },
-            "enh": {
-                "STOI": [],
-                "WB_PESQ": [],
-            },
+    def metrics_visualization(self, enh_list, clean_list, epoch, n_folds=1, n_jobs=8):
+        # get metrics
+        metrics = {
+            "STOI": [],
+            "WB_PESQ": [],
         }
 
-        split_num = len(noisy_list) // n_folds
-        for n in range(n_folds):
-            noisy_stoi_score = Parallel(n_jobs=n_jobs)(
-                delayed(STOI)(noisy, clean)
-                for noisy, clean in tqdm(
-                    zip(
-                        noisy_list[n * split_num : (n + 1) * split_num], clean_list[n * split_num : (n + 1) * split_num]
-                    )
-                )
-            )
-            enh_stoi_score = Parallel(n_jobs=n_jobs)(
-                delayed(STOI)(noisy, clean)
-                for noisy, clean in tqdm(
-                    zip(enh_list[n * split_num : (n + 1) * split_num], clean_list[n * split_num : (n + 1) * split_num])
-                )
-            )
-            score["noisy"]["STOI"].append(np.mean(noisy_stoi_score))
-            score["enh"]["STOI"].append(np.mean(enh_stoi_score))
+        # compute enh metrics
+        compute_metric(
+            enh_list,
+            clean_list,
+            metrics,
+            n_folds=n_folds,
+            n_jobs=n_jobs,
+            pre_load=True,
+        )
 
-            noisy_wb_pesq_score = Parallel(n_jobs=n_jobs)(
-                delayed(WB_PESQ)(noisy, clean)
-                for noisy, clean in tqdm(
-                    zip(
-                        noisy_list[n * split_num : (n + 1) * split_num], clean_list[n * split_num : (n + 1) * split_num]
-                    )
-                )
-            )
-            enh_wb_pesq_score = Parallel(n_jobs=n_jobs)(
-                delayed(WB_PESQ)(noisy, clean)
-                for noisy, clean in tqdm(
-                    zip(enh_list[n * split_num : (n + 1) * split_num], clean_list[n * split_num : (n + 1) * split_num])
-                )
-            )
-            score["noisy"]["WB_PESQ"].append(np.mean(noisy_wb_pesq_score))
-            score["enh"]["WB_PESQ"].append(np.mean(enh_wb_pesq_score))
+        self.writer.add_scalar("STOI/valid", metrics["STOI"], epoch)
+        self.writer.add_scalar("WB_PESQ/valid", metrics["WB_PESQ"], epoch)
 
-        self.writer.add_scalar("STOI/valid/noisy", np.mean(score["noisy"]["STOI"]), epoch)
-        self.writer.add_scalar("STOI/valid/enh", np.mean(score["enh"]["STOI"]), epoch)
-        self.writer.add_scalar("WB_PESQ/valid/noisy", np.mean(score["noisy"]["WB_PESQ"]), epoch)
-        self.writer.add_scalar("WB_PESQ/valid/enh", np.mean(score["enh"]["WB_PESQ"]), epoch)
-
-        return (np.mean(score["enh"]["STOI"]) + transform_pesq_range(np.mean(score["enh"]["WB_PESQ"]))) / 2
+        return ((metrics["STOI"]) + transform_pesq_range(metrics["WB_PESQ"])) / 2
 
     def hparams_visualization(self):
         hparams_dict = {
             "lr": self.optimizer.get_lr(),
         }
-        metrics_list = ["lr", "STOI/valid/noisy", "STOI/valid/enh", "WB_PESQ/valid/noisy", "WB_PESQ/valid/enh"]
+        metrics_list = ["STOI/valid", "WB_PESQ/valid"]
         self.writer.add_hparams(
             hparams_dict=hparams_dict,
             metrics_list=metrics_list,
@@ -315,7 +282,7 @@ class Trainer:
 
         # visual metrics and get valid score
         metrics_score = self.metrics_visualization(
-            noisy_list, clean_list, enh_list, epoch, n_folds=self.n_folds, n_jobs=self.n_jobs
+            enh_list, clean_list, epoch, n_folds=self.n_folds, n_jobs=self.n_jobs
         )
 
         return metrics_score
