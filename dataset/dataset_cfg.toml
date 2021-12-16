@@ -5,6 +5,7 @@ seed = 0
 batch_size = 20
 num_workers = 4
 drop_last = false
+pin_memory = false
 
 [dataset]
 sr = 16000

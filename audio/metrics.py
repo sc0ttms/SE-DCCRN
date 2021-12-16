@@ -4,7 +4,7 @@ import numpy as np
 from pystoi.stoi import stoi
 from pesq import pesq
 from pesq import PesqError
-import paddle
+import torch
 
 
 EPS = np.finfo(np.float32).eps
@@ -14,8 +14,8 @@ def SI_SDR(noisy, clean):
     """Scale-Invariant Signal-to-Distortion Ratio (SI-SDR)
 
     Args:
-        noisy: numpy.ndarray(or paddle tensor), [..., T]
-        clean: numpy.ndarray(or paddle tensor), [..., T]
+        noisy: numpy.ndarray(or torch tensor), [..., T]
+        clean: numpy.ndarray(or torch tensor), [..., T]
 
     Returns:
         SI-SDR
@@ -23,18 +23,17 @@ def SI_SDR(noisy, clean):
     References
         SDR– Half- Baked or Well Done? (http://www.merl.com/publications/docs/TR2019-013.pdf)
     """
-    if paddle.is_tensor(noisy) and paddle.is_tensor(clean):
-        # noisy, clean = paddle.broadcast_tensors([noisy, clean]) # not support bp
-        clean_energy = paddle.sum(clean ** 2, axis=-1, keepdim=True)
+    if torch.is_tensor(noisy) and torch.is_tensor(clean):
+        clean_energy = torch.sum(clean ** 2, dim=-1, keepdim=True)
 
-        optimal_scaling = paddle.sum(clean * noisy, axis=-1, keepdim=True) / (clean_energy + EPS)
+        optimal_scaling = torch.sum(clean * noisy, dim=-1, keepdim=True) / (clean_energy + EPS)
 
         projection = optimal_scaling * clean
 
         noise = noisy - projection
 
-        ratio = paddle.sum(projection ** 2, axis=-1) / (paddle.sum(noise ** 2, axis=-1) + EPS)
-        return 10 * paddle.log10(ratio + EPS)
+        ratio = torch.sum(projection ** 2, dim=-1) / (torch.sum(noise ** 2, dim=-1) + EPS)
+        return 10 * torch.log10(ratio + EPS)
     else:
         noisy, clean = np.broadcast_arrays(noisy, clean)
         clean_energy = np.sum(clean ** 2, axis=-1, keepdims=True)

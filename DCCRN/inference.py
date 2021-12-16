@@ -11,9 +11,9 @@ import soundfile as sf
 import numpy as np
 from tqdm import tqdm
 from joblib import Parallel, delayed
-import paddle
-from paddle.io import DataLoader
-from visualdl import LogWriter
+import torch
+from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
 sys.path.append("./")
 from DCCRN.model import DCCRN
@@ -26,7 +26,10 @@ plt.switch_backend("agg")
 
 
 class Inferencer:
-    def __init__(self, model, test_iter, config):
+    def __init__(self, model, test_iter, config, device):
+        # get device
+        self.device = device
+
         # set path
         base_path = os.path.abspath(config["path"]["base"])
         os.makedirs(base_path, exist_ok=True)
@@ -44,7 +47,7 @@ class Inferencer:
         self.test_iter = test_iter
 
         # get model
-        self.model = model
+        self.model = model.to(device)
         self.load_checkpoint()
 
         # get dataset args
@@ -52,7 +55,7 @@ class Inferencer:
         self.n_fft = config["dataset"]["n_fft"]
         self.win_len = config["dataset"]["win_len"]
         self.hop_len = config["dataset"]["hop_len"]
-        self.window = paddle.to_tensor(np.hanning(self.win_len), dtype=paddle.float32)
+        self.window = torch.hann_window(self.win_len, periodic=False, device=self.device)
 
         # get inference args
         self.n_folds = config["inference"]["n_folds"]
@@ -60,22 +63,22 @@ class Inferencer:
         self.audio_visual_samples = config["inference"]["audio_visual_samples"]
 
         # config logs
-        self.writer = LogWriter(logdir=self.logs_path, max_queue=5, flush_secs=60)
+        self.writer = SummaryWriter(log_dir=self.logs_path, max_queue=5, flush_secs=60)
         self.writer_text_enh_clipped_step = 1
         self.writer.add_text(
             tag="config",
-            text_string=f"<pre \n{toml.dumps(config)} \n</pre>",
-            step=1,
+            text_string=f"<pre>  \n{toml.dumps(config)}  \n</pre>",
+            global_step=self.writer_text_enh_clipped_step,
         )
 
     def load_checkpoint(self):
         best_model_path = os.path.join(self.checkpoints_path, "best_model.tar")
         assert os.path.exists(best_model_path)
 
-        checkpoint = paddle.load(best_model_path)
+        checkpoint = torch.load(best_model_path, map_location="cpu")
 
         self.epoch = checkpoint["epoch"]
-        self.model.set_state_dict(checkpoint["model"])
+        self.model.load_state_dict(checkpoint["model"])
 
         print(f"Loading model checkpoint (epoch == {self.epoch})...")
 
@@ -84,7 +87,7 @@ class Inferencer:
             self.writer.add_text(
                 tag="enh_clipped",
                 text_string=enh_file,
-                step=self.writer_text_enh_clipped_step,
+                global_step=self.writer_text_enh_clipped_step,
             )
         self.writer_text_enh_clipped_step += 1
 
@@ -150,6 +153,7 @@ class Inferencer:
     def set_model_to_eval_mode(self):
         self.model.eval()
 
+    @torch.no_grad()
     def __call__(self):
         self.set_model_to_eval_mode()
 
@@ -159,8 +163,10 @@ class Inferencer:
         enh_list = []
         enh_files = []
         for noisy, clean, noisy_file in tqdm(self.test_iter, desc="test"):
-            with paddle.no_grad():
-                enh = self.model(noisy)
+            noisy = noisy.to(self.device)
+            clean = clean.to(self.device)
+
+            enh = self.model(noisy)
 
             noisy = noisy.detach().squeeze(0).cpu().numpy()
             clean = clean.detach().squeeze(0).cpu().numpy()
@@ -189,9 +195,8 @@ class Inferencer:
 
 if __name__ == "__main__":
     # config device
-    device = paddle.get_device()
-    paddle.set_device(device)
-    print(f"device {device}")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(device)
 
     # get config
     toml_path = os.path.join(os.path.dirname(__file__), "config.toml")
@@ -200,10 +205,16 @@ if __name__ == "__main__":
     # get dataset path
     dataset_path = os.path.join(os.getcwd(), "dataset_csv")
 
+    cudnn_enabled = False if device == "cpu" else config["meta"]["cudnn_enabled"]
+    torch.backends.cudnn.enabled = cudnn_enabled
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
     # get dataloader args
     batch_size = config["dataloader"]["batch_size"]
     num_workers = 0 if device == "cpu" else config["dataloader"]["num_workers"]
     drop_last = config["dataloader"]["drop_last"]
+    pin_memory = config["dataloader"]["pin_memory"]
 
     # get test_iter
     test_set = DNS_Dataset(dataset_path, config, mode="test")
@@ -213,13 +224,14 @@ if __name__ == "__main__":
         shuffle=False,
         num_workers=num_workers,
         drop_last=drop_last,
+        pin_memory=pin_memory,
     )
 
     # config model
-    model = DCCRN(config, mode="test")
+    model = DCCRN(config, mode="test", device=device)
 
     # inferencer
-    inference = Inferencer(model, test_iter, config)
+    inference = Inferencer(model, test_iter, config, device)
 
     # inference
     inference()

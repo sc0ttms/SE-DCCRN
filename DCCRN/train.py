@@ -8,12 +8,11 @@ import librosa.display
 import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
-import paddle
-import paddle.nn as nn
-from paddle.io import DataLoader
-from paddle.amp import GradScaler, auto_cast
-from visualdl import LogWriter
-import paddleslim
+import torch
+from torch.utils.data import DataLoader
+from torch.cuda.amp import GradScaler, autocast
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.utils.tensorboard import SummaryWriter
 
 
 sys.path.append("./")
@@ -28,6 +27,11 @@ plt.switch_backend("agg")
 
 class Trainer:
     def __init__(self, model, train_iter, valid_iter, config, device):
+        # set model
+        self.model = model.to(device)
+        # set device
+        self.device = device
+
         # set path
         base_path = config["path"]["base"]
         os.makedirs(base_path, exist_ok=True)
@@ -40,49 +44,41 @@ class Trainer:
         self.sr = config["dataset"]["sr"]
         self.audio_len = config["dataset"]["audio_len"]
 
+        # get meta args
+        self.use_amp = False if self.device == "cpu" else config["meta"]["use_amp"]
+
         # get train args
-        self.use_amp = False if device == "cpu" else config["train"]["use_amp"]
         self.resume = config["train"]["resume"]
         self.n_folds = config["train"]["n_folds"]
         self.n_jobs = config["train"]["n_jobs"]
         self.epochs = config["train"]["epochs"]
         self.save_checkpoint_interval = config["train"]["save_checkpoint_interval"]
         self.valid_interval = config["train"]["valid_interval"]
+        self.clip_grad_norm_value = config["train"]["clip_grad_norm_value"]
         self.audio_visual_samples = config["train"]["audio_visual_samples"]
-
-        # get qat args
-        self.qat_enable = config["qat"]["enable"]
-        self.qat_resume = config["qat"]["resume"]
-        self.qat_config = {
-            "weight_preprocess_type": None,
-            "activation_preprocess_type": None,
-            "weight_bits": config["qat"]["weight_bits"],
-            "activation_bits": config["qat"]["activation_bits"],
-            "quantizable_layer_type": config["qat"]["quantizable_layer_type"],
-        }
 
         # init common args
         self.start_epoch = 1
         self.best_score = 0.0
 
         # amp
-        self.scaler = GradScaler(enable=self.use_amp)
-
-        # set model
-        self.model = model
+        self.scaler = GradScaler(enabled=self.use_amp)
 
         # set iter
         self.train_iter = train_iter
         self.valid_iter = valid_iter
 
         # config optimizer
-        self.scheduler = paddle.optimizer.lr.ReduceOnPlateau(
-            learning_rate=config["train"]["lr"], factor=0.5, patience=0, verbose=False
+        self.optimizer = getattr(torch.optim, config["train"]["optimizer"])(
+            params=model.parameters(),
+            lr=config["train"]["lr"],
         )
-        self.optimizer = getattr(paddle.optimizer, config["train"]["optimizer"])(
-            parameters=model.parameters(),
-            learning_rate=self.scheduler,
-            grad_clip=nn.ClipGradByNorm(clip_norm=config["train"]["clip_grad_norm_value"]),
+        self.scheduler = ReduceLROnPlateau(
+            self.optimizer,
+            mode="min",
+            factor=0.5,
+            patience=0,
+            verbose=True,
         )
 
         # mkdir path
@@ -90,25 +86,24 @@ class Trainer:
 
         # resume
         if self.resume:
-            self.resume_checkpoint(
-                qat_enable=self.qat_enable,
-                qat_resume=self.qat_resume,
-            )
+            self.resume_checkpoint()
 
         # config logs
-        self.writer = LogWriter(
-            logdir=os.path.join(self.logs_path, f"start_epoch_{self.start_epoch}"), max_queue=5, flush_secs=60
+        self.writer = SummaryWriter(
+            log_dir=os.path.join(self.logs_path, f"start_epoch_{self.start_epoch}"),
+            max_queue=5,
+            flush_secs=60,
         )
         self.writer.add_text(
             tag="config",
-            text_string=f"<pre \n{toml.dumps(config)} \n</pre>",
-            step=1,
+            text_string=f"<pre>  \n{toml.dumps(config)}  \n</pre>",
+            global_step=1,
         )
 
         # print params
-        self.print_networks()
+        self.model.print_networks()
 
-    def save_checkpoint(self, epoch, is_best_epoch=False, qat_enable=False):
+    def save_checkpoint(self, epoch, is_best_epoch=False):
         print(f"Saving {epoch} epoch model checkpoint...")
 
         state_dict = {
@@ -121,50 +116,27 @@ class Trainer:
         }
 
         # save latest_model.tar
-        paddle.save(
-            state_dict,
-            os.path.join(
-                self.checkpoints_path,
-                "qat_latest_model.tar" if qat_enable else "latest_model.tar",
-            ),
-        )
+        torch.save(state_dict, os.path.join(self.checkpoints_path, "latest_model.tar"))
 
         # save best_model.tar
         if is_best_epoch:
-            paddle.save(
-                state_dict,
-                os.path.join(
-                    self.checkpoints_path,
-                    "qat_best_model.tar" if qat_enable else "best_model.tar",
-                ),
-            )
+            torch.save(state_dict, os.path.join(self.checkpoints_path, "best_model.tar"))
 
-    def resume_checkpoint(self, qat_enable=False, qat_resume=False):
-        model_path = os.path.join(
-            self.checkpoints_path,
-            "qat_best_model.tar" if qat_resume else "best_model.tar" if qat_enable else "latest_model.tar",
-        )
+    def resume_checkpoint(self):
+        model_path = os.path.join(self.checkpoints_path, "latest_model.tar")
 
         assert os.path.exists(model_path)
 
-        checkpoint = paddle.load(model_path)
+        checkpoint = torch.load(model_path, map_location="cpu")
 
         self.start_epoch = checkpoint["epoch"] + 1
         self.best_score = checkpoint["best_score"]
-        self.scheduler.set_state_dict(checkpoint["scheduler"])
-        self.optimizer.set_state_dict(checkpoint["optimizer"])
-        self.model.set_state_dict(checkpoint["model"])
+        self.scheduler.load_state_dict(checkpoint["scheduler"])
+        self.optimizer.load_state_dict(checkpoint["optimizer"])
+        self.model.load_state_dict(checkpoint["model"])
         self.scaler.load_state_dict(checkpoint["scaler"])
 
-        if qat_enable and qat_resume == False:
-            quanter = paddleslim.QAT(config=self.qat_config)
-            quanter.quantize(self.model)
-
         print(f"Model checkpoint loaded. Training will begin at {self.start_epoch} epoch.")
-
-    def print_networks(self):
-        input_size = (1, int(self.sr * self.audio_len))
-        print(paddle.summary(self.model, input_size=input_size))
 
     def is_best_epoch(self, score):
         if score > self.best_score:
@@ -218,16 +190,6 @@ class Trainer:
 
         return ((metrics["STOI"]) + transform_pesq_range(metrics["WB_PESQ"])) / 2
 
-    def hparams_visualization(self):
-        hparams_dict = {
-            "lr": self.optimizer.get_lr(),
-        }
-        metrics_list = ["STOI/valid", "WB_PESQ/valid"]
-        self.writer.add_hparams(
-            hparams_dict=hparams_dict,
-            metrics_list=metrics_list,
-        )
-
     def set_model_to_train_mode(self):
         self.model.train()
 
@@ -237,21 +199,27 @@ class Trainer:
     def train_epoch(self, epoch):
         loss_total = 0.0
         for noisy, clean in tqdm(self.train_iter, desc="train"):
-            self.optimizer.clear_grad()
-            with auto_cast(enable=self.use_amp):
+            noisy = noisy.to(self.device)
+            clean = clean.to(self.device)
+
+            self.optimizer.zero_grad()
+            with autocast(enabled=self.use_amp):
                 enh = self.model(noisy)
                 loss = self.model.loss(enh, clean)
 
-            scaled = self.scaler.scale(loss)
-            scaled.backward()
-            self.scaler.minimize(self.optimizer, scaled)
+            self.scaler.scale(loss).backward()
+            self.scaler.unscale_(self.optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), self.clip_grad_norm_value)
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
 
             loss_total += loss.item()
 
         # logs
         self.writer.add_scalar("loss/train", loss_total / len(self.train_iter), epoch)
-        self.writer.add_scalar("lr", self.optimizer.get_lr(), epoch)
+        self.writer.add_scalar("lr", self.optimizer.state_dict()["param_groups"][0]["lr"], epoch)
 
+    @torch.no_grad()
     def valid_epoch(self, epoch):
         noisy_list = []
         clean_list = []
@@ -260,9 +228,11 @@ class Trainer:
 
         loss_total = 0.0
         for noisy, clean, noisy_file in tqdm(self.valid_iter, desc="valid"):
-            with paddle.no_grad():
-                enh = self.model(noisy)
-                loss = self.model.loss(enh, clean)
+            noisy = noisy.to(self.device)
+            clean = clean.to(self.device)
+
+            enh = self.model(noisy)
+            loss = self.model.loss(enh, clean)
 
             loss_total += loss.item()
 
@@ -302,7 +272,7 @@ class Trainer:
             self.train_epoch(epoch)
 
             if self.save_checkpoint_interval != 0 and (epoch % self.save_checkpoint_interval == 0):
-                self.save_checkpoint(epoch, qat_enable=self.qat_enable)
+                self.save_checkpoint(epoch)
 
             # valid
             if epoch % self.valid_interval == 0:
@@ -312,34 +282,33 @@ class Trainer:
                 metric_score = self.valid_epoch(epoch)
 
                 if self.is_best_epoch(metric_score):
-                    self.save_checkpoint(epoch, is_best_epoch=True, qat_enable=self.qat_enable)
+                    self.save_checkpoint(epoch, is_best_epoch=True)
 
-            # logs hparams
-            self.hparams_visualization()
             print(f"{'=' * 20} {epoch} epoch end {'=' * 20}")
 
 
 if __name__ == "__main__":
     # config device
-    device = paddle.get_device()
-    paddle.set_device(device)
-    print(f"device {device}")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(device)
 
     # get config
     toml_path = os.path.join(os.path.dirname(__file__), "config.toml")
     config = toml.load(toml_path)
 
-    # get seed
-    # seed = config["random"]["seed"]
-    # np.random.seed(seed)
-
     # get dataset path
     dataset_path = os.path.join(os.getcwd(), "dataset_csv")
+
+    cudnn_enabled = False if device == "cpu" else config["meta"]["cudnn_enabled"]
+    torch.backends.cudnn.enabled = cudnn_enabled
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
     # get dataloader args
     batch_size = config["dataloader"]["batch_size"]
     num_workers = 0 if device == "cpu" else config["dataloader"]["num_workers"]
     drop_last = config["dataloader"]["drop_last"]
+    pin_memory = config["dataloader"]["pin_memory"]
 
     # get train_iter
     train_set = DNS_Dataset(dataset_path, config, mode="train")
@@ -349,6 +318,7 @@ if __name__ == "__main__":
         shuffle=True,
         num_workers=num_workers,
         drop_last=drop_last,
+        pin_memory=pin_memory,
     )
 
     # get valid_iter
@@ -359,10 +329,11 @@ if __name__ == "__main__":
         shuffle=False,
         num_workers=num_workers,
         drop_last=drop_last,
+        pin_memory=pin_memory,
     )
 
     # config model
-    model = DCCRN(config, mode="train")
+    model = DCCRN(config, mode="train", device=device)
 
     # trainer
     trainer = Trainer(model, train_iter, valid_iter, config, device)

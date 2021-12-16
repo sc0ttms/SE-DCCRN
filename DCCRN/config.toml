@@ -1,5 +1,7 @@
-[random]
+[meta]
 seed = 0
+use_amp = true
+cudnn_enabled = false
 
 [path]
 # base = "./output/DCCRN"
@@ -9,6 +11,7 @@ base = "/model/DCCRN"
 batch_size = [85, 20]
 num_workers = 8
 drop_last = false
+pin_memory = false
 
 [dataset]
 sr = 16000
@@ -20,13 +23,12 @@ limit = 0
 
 [model]
 encoder_decoder_num_channels = [2, 32, 64, 128, 256, 256, 256]
-encoder_decoder_kernel_size = [5, 2]
+encoder_decoder_kernel_size = 5
 rnn_hidden_size = 256
 rnn_num_layers = 2
 look_ahead = 1
 
 [train]
-use_amp = true
 resume = false
 n_folds = 1
 n_jobs = 8
@@ -34,19 +36,12 @@ optimizer = "Adam"
 lr = 1e-3
 epochs = 9999
 save_checkpoint_interval = 1
-valid_interval = 5
+valid_interval = 1
 clip_grad_norm_value = 10.0
-audio_visual_samples = 3
-
-[qat]
-enable = false
-resume = false
-weight_bits = 8
-activation_bits = 8
-quantizable_layer_type = ["Conv2D", "Linear", "Conv2DTranspose"]
+audio_visual_samples = 2
 
 [inference]
 n_folds = 1
 n_jobs = 8
 audio_len = 30.0
-audio_visual_samples = 3
+audio_visual_samples = 2

@@ -7,8 +7,8 @@ import librosa
 import pandas as pd
 from tqdm import tqdm
 import numpy as np
-import paddle
-from paddle.io import Dataset, DataLoader
+import torch
+from torch.utils.data import Dataset, DataLoader
 
 
 sys.path.append(os.getcwd())
@@ -61,17 +61,6 @@ class DNS_Dataset(Dataset):
             clean, _ = librosa.load(clean_file, sr=self.sr)
             # get target samples
             noisy, clean = sub_sample(noisy, clean, self.samples)
-            # chs = int(len(noisy) // self.samples)
-            # noisy = noisy[: chs * self.samples].reshape(-1, self.samples)
-            # clean = clean[: chs * self.samples].reshape(-1, self.samples)
-            # indices = list(range(noisy.shape[0]))
-            # np.random.shuffle(indices)
-            # noisy = noisy[indices]
-            # clean = clean[indices]
-
-            # to tensor
-            noisy = paddle.to_tensor(noisy)
-            clean = paddle.to_tensor(clean)
 
             return noisy, clean
         elif self.mode in ["valid", "test"]:
@@ -82,18 +71,13 @@ class DNS_Dataset(Dataset):
             clean_file = self.clean_files[idx]
             clean, _ = librosa.load(clean_file, sr=self.sr)
 
-            # to tensor
-            noisy = paddle.to_tensor(noisy)
-            clean = paddle.to_tensor(clean)
-
             return noisy, clean, noisy_file
 
 
 if __name__ == "__main__":
     # config device
-    device = paddle.get_device()
-    paddle.set_device(device)
-    print(f"device {device}")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(device)
 
     # get dataset path
     dataset_path = os.path.join(os.getcwd(), "dataset_csv")
@@ -108,6 +92,7 @@ if __name__ == "__main__":
     batch_size = config["dataloader"]["batch_size"]
     num_workers = 0 if device == "cpu" else config["dataloader"]["num_workers"]
     drop_last = config["dataloader"]["drop_last"]
+    pin_memory = config["dataloader"]["pin_memory"]
 
     # get train_iter
     train_set = DNS_Dataset(dataset_path, config, mode="train")
@@ -117,6 +102,7 @@ if __name__ == "__main__":
         shuffle=True,
         num_workers=num_workers,
         drop_last=drop_last,
+        pin_memory=pin_memory,
     )
     for noisy, clean in tqdm(train_iter, desc="train_iter"):
         print(noisy.shape, clean.shape)
@@ -130,6 +116,7 @@ if __name__ == "__main__":
         shuffle=False,
         num_workers=num_workers,
         drop_last=drop_last,
+        pin_memory=pin_memory,
     )
     for noisy, clean, _ in tqdm(valid_iter, desc="valid_iter"):
         print(noisy.shape, clean.shape)
@@ -143,6 +130,7 @@ if __name__ == "__main__":
         shuffle=False,
         num_workers=num_workers,
         drop_last=drop_last,
+        pin_memory=pin_memory,
     )
     for noisy, clean, noisy_file in tqdm(valid_iter, desc="valid_iter"):
         print(noisy.shape, clean.shape, noisy_file)

@@ -3,28 +3,25 @@
 import sys
 import os
 import toml
-import numpy as np
-import paddle
-import paddle.nn as nn
-import paddle.nn.functional as F
-from paddle.signal import stft, istft
-from paddle.framework import ParamAttr
-from paddle.nn.initializer import Constant, Normal
+from torchinfo import summary
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.cuda.amp import GradScaler, autocast
 
 
 sys.path.append(os.getcwd())
-from audio.feature import offline_laplace_norm, cumulative_laplace_norm
 from audio.metrics import SI_SDR
 
 
-class ComplexConv2D(nn.Layer):
+class ComplexConv2d(nn.Module):
     def __init__(
         self,
         in_channels,
         out_channels,
-        kernel_size=[5, 2],
-        stride=[2, 1],
-        padding=[2, 1],
+        kernel_size=(5, 2),
+        stride=(2, 1),
+        padding=(2, 1),
     ):
         super().__init__()
 
@@ -34,24 +31,27 @@ class ComplexConv2D(nn.Layer):
         self.stride = stride
         self.padding = padding
 
-        self.conv2d_real = nn.Conv2D(
+        self.conv2d_real = nn.Conv2d(
             self.in_channels,
             self.out_channels,
             kernel_size=self.kernel_size,
             stride=self.stride,
             padding=[self.padding[0], 0],
-            weight_attr=ParamAttr(initializer=Normal(mean=0, std=0.05)),
-            bias_attr=ParamAttr(initializer=Constant(value=0.0)),
         )
-        self.conv2d_imag = nn.Conv2D(
+        self.conv2d_imag = nn.Conv2d(
             self.in_channels,
             self.out_channels,
             kernel_size=self.kernel_size,
             stride=self.stride,
             padding=[self.padding[0], 0],
-            weight_attr=ParamAttr(initializer=Normal(mean=0, std=0.05)),
-            bias_attr=ParamAttr(initializer=Constant(value=0.0)),
         )
+
+        self.apply(self.weight_init)
+
+    def weight_init(self, m):
+        if isinstance(m, nn.Conv2d):
+            nn.init.normal_(m.weight.data, std=0.05)
+            nn.init.constant_(m.bias.data, 0.0)
 
     def forward(self, input):
         # [B, C, F, T]
@@ -63,7 +63,7 @@ class ComplexConv2D(nn.Layer):
 
         # get real, imag
         # [B, C // 2, F, T]
-        real, imag = paddle.chunk(input, 2, axis=1)
+        real, imag = torch.chunk(input, 2, axis=1)
 
         # (Xr*Wr-Xi*Wi) + j(Xr*Wi+Xi*Wr)
         rr = self.conv2d_real(real)
@@ -74,10 +74,10 @@ class ComplexConv2D(nn.Layer):
         imag = ri + ir
 
         # -> [B, C, F, T]
-        return paddle.concat([real, imag], axis=1)
+        return torch.cat([real, imag], axis=1)
 
 
-class ComplexLSTM(nn.Layer):
+class ComplexLSTM(nn.Module):
     def __init__(
         self,
         input_size,
@@ -89,14 +89,18 @@ class ComplexLSTM(nn.Layer):
         self.input_size = input_size
         self.hidden_size = hidden_size
 
-        self.lstm_real = nn.LSTM(self.input_size, self.hidden_size)
-        self.lstm_imag = nn.LSTM(self.input_size, self.hidden_size)
+        self.lstm_real = nn.LSTM(self.input_size, self.hidden_size, batch_first=True)
+        self.lstm_imag = nn.LSTM(self.input_size, self.hidden_size, batch_first=True)
         if projection_size is not None:
             self.projection_size = projection_size
             self.fc_real = nn.Linear(self.hidden_size, self.projection_size)
             self.fc_imag = nn.Linear(self.hidden_size, self.projection_size)
         else:
             self.projection_size = None
+
+    def flatten_parameters(self):
+        self.lstm_real.flatten_parameters()
+        self.lstm_imag.flatten_parameters()
 
     def forward(self, input):
         # [B, C, F, T]
@@ -105,10 +109,10 @@ class ComplexLSTM(nn.Layer):
 
         # get real, imag
         # [B, C // 2, F, T]
-        real, imag = paddle.chunk(input, 2, axis=1)
+        real, imag = torch.chunk(input, 2, axis=1)
         # [B, C // 2, F, T] -> [B, T, C // 2, F] -> [B, T, (C // 2) * F]
-        real = real.transpose([0, 3, 1, 2]).reshape([batch_size, num_frames, (num_channels // 2) * num_freqs])
-        imag = imag.transpose([0, 3, 1, 2]).reshape([batch_size, num_frames, (num_channels // 2) * num_freqs])
+        real = real.permute(0, 3, 1, 2).reshape(batch_size, num_frames, (num_channels // 2) * num_freqs)
+        imag = imag.permute(0, 3, 1, 2).reshape(batch_size, num_frames, (num_channels // 2) * num_freqs)
 
         # (Xr*Wr-Xi*Wi) + j(Xr*Wi+Xi*Wr)
         rr, _ = self.lstm_real(real)
@@ -122,22 +126,22 @@ class ComplexLSTM(nn.Layer):
             imag = self.fc_imag(imag)
 
         # [B, T, C // 2 * F] -> [B, T, C // 2, F] -> [B, C // 2, F, T]
-        real = real.reshape([batch_size, num_frames, num_channels // 2, -1]).transpose([0, 2, 3, 1])
-        imag = imag.reshape([batch_size, num_frames, num_channels // 2, -1]).transpose([0, 2, 3, 1])
+        real = real.reshape(batch_size, num_frames, num_channels // 2, -1).permute(0, 2, 3, 1)
+        imag = imag.reshape(batch_size, num_frames, num_channels // 2, -1).permute(0, 2, 3, 1)
 
         # -> [B, C, F, T]
-        return paddle.concat([real, imag], axis=1)
+        return torch.cat([real, imag], axis=1)
 
 
-class ComplexConv2DTranspose(nn.Layer):
+class ComplexConvTranspose2d(nn.Module):
     def __init__(
         self,
         in_channels,
         out_channels,
-        kernel_size=[5, 2],
-        stride=[2, 1],
-        padding=[2, 0],
-        output_padding=[1, 0],
+        kernel_size=(5, 2),
+        stride=(2, 1),
+        padding=(2, 0),
+        output_padding=(1, 0),
     ):
         super().__init__()
 
@@ -148,26 +152,29 @@ class ComplexConv2DTranspose(nn.Layer):
         self.padding = padding
         self.output_padding = output_padding
 
-        self.conv2d_transpose_real = nn.Conv2DTranspose(
+        self.conv_transpose2d_real = nn.ConvTranspose2d(
             self.in_channels,
             self.out_channels,
             kernel_size=self.kernel_size,
             stride=self.stride,
             padding=self.padding,
             output_padding=self.output_padding,
-            weight_attr=ParamAttr(initializer=Normal(mean=0, std=0.05)),
-            bias_attr=ParamAttr(initializer=Constant(value=0.0)),
         )
-        self.conv2d_transpose_imag = nn.Conv2DTranspose(
+        self.conv_transpose2d_imag = nn.ConvTranspose2d(
             self.in_channels,
             self.out_channels,
             kernel_size=self.kernel_size,
             stride=self.stride,
             padding=self.padding,
             output_padding=self.output_padding,
-            weight_attr=ParamAttr(initializer=Normal(mean=0, std=0.05)),
-            bias_attr=ParamAttr(initializer=Constant(value=0.0)),
         )
+
+        self.apply(self.weight_init)
+
+    def weight_init(self, m):
+        if isinstance(m, nn.ConvTranspose2d):
+            nn.init.normal_(m.weight.data, std=0.05)
+            nn.init.constant_(m.bias.data, 0.0)
 
     def forward(self, input):
         # [B, C, F, T]
@@ -176,33 +183,36 @@ class ComplexConv2DTranspose(nn.Layer):
 
         # get real, imag
         # [B, C // 2, F, T]
-        real, imag = paddle.chunk(input, 2, axis=1)
+        real, imag = torch.chunk(input, 2, axis=1)
 
         # (Xr*Wr-Xi*Wi) + j(Xr*Wi+Xi*Wr)
-        rr = self.conv2d_transpose_real(real)
-        ii = self.conv2d_transpose_imag(imag)
-        ri = self.conv2d_transpose_imag(real)
-        ir = self.conv2d_transpose_real(imag)
+        rr = self.conv_transpose2d_real(real)
+        ii = self.conv_transpose2d_imag(imag)
+        ri = self.conv_transpose2d_imag(real)
+        ir = self.conv_transpose2d_real(imag)
         real = rr - ii
         imag = ri + ir
 
         # -> [B, C, F, T]
-        return paddle.concat([real, imag], axis=1)
+        return torch.cat([real, imag], axis=1)
 
 
-class DCCRN(nn.Layer):
-    def __init__(self, config, mode="train"):
+class DCCRN(nn.Module):
+    def __init__(self, config, mode="train", device="cpu"):
         super().__init__()
 
         # set mode
         self.mode = mode
+
+        # set device
+        self.device = device
 
         # get dataset args
         self.n_fft = config["dataset"]["n_fft"]
         self.win_len = config["dataset"]["win_len"]
         self.hop_len = config["dataset"]["hop_len"]
         self.audio_len = config["dataset"]["audio_len"]
-        self.window = paddle.to_tensor(np.hanning(self.win_len), dtype=paddle.float32)
+        self.window = torch.hann_window(self.win_len, periodic=False, device=self.device)
 
         # get model args
         self.encoder_decoder_num_channels = config["model"]["encoder_decoder_num_channels"]
@@ -212,18 +222,18 @@ class DCCRN(nn.Layer):
         self.look_ahead = config["model"]["look_ahead"]
 
         # encoder
-        self.encoder = nn.LayerList()
+        self.encoder = nn.ModuleList()
         for i in range(len(self.encoder_decoder_num_channels) - 1):
             self.encoder.append(
                 nn.Sequential(
-                    ComplexConv2D(
+                    ComplexConv2d(
                         self.encoder_decoder_num_channels[i] // 2,
                         self.encoder_decoder_num_channels[i + 1] // 2,
-                        kernel_size=self.encoder_decoder_kernel_size,
-                        stride=[2, 1],
-                        padding=[2, 1],
+                        kernel_size=(self.encoder_decoder_kernel_size, 2),
+                        stride=(2, 1),
+                        padding=(2, 1),
                     ),
-                    nn.BatchNorm2D(self.encoder_decoder_num_channels[i + 1]),
+                    nn.BatchNorm2d(self.encoder_decoder_num_channels[i + 1]),
                     nn.PReLU(),
                 )
             )
@@ -244,76 +254,80 @@ class DCCRN(nn.Layer):
         self.rnn = nn.Sequential(*rnns)
 
         # decoder
-        self.decoder = nn.LayerList()
+        self.decoder = nn.ModuleList()
         for i in range(len(self.encoder_decoder_num_channels) - 1, 0, -1):
             if i != 1:
                 self.decoder.append(
                     nn.Sequential(
-                        ComplexConv2DTranspose(
+                        ComplexConvTranspose2d(
                             self.encoder_decoder_num_channels[i] * 2 // 2,
                             self.encoder_decoder_num_channels[i - 1] // 2,
-                            kernel_size=self.encoder_decoder_kernel_size,
-                            stride=[2, 1],
-                            padding=[2, 0],
-                            output_padding=[1, 0],
+                            kernel_size=(self.encoder_decoder_kernel_size, 2),
+                            stride=(2, 1),
+                            padding=(2, 0),
+                            output_padding=(1, 0),
                         ),
-                        nn.BatchNorm2D(self.encoder_decoder_num_channels[i - 1]),
+                        nn.BatchNorm2d(self.encoder_decoder_num_channels[i - 1]),
                         nn.PReLU(),
                     )
                 )
             else:
                 self.decoder.append(
                     nn.Sequential(
-                        ComplexConv2DTranspose(
+                        ComplexConvTranspose2d(
                             self.encoder_decoder_num_channels[i] * 2 // 2,
                             self.encoder_decoder_num_channels[i - 1] // 2,
-                            kernel_size=self.encoder_decoder_kernel_size,
-                            stride=[2, 1],
-                            padding=[2, 0],
-                            output_padding=[1, 0],
+                            kernel_size=(self.encoder_decoder_kernel_size, 2),
+                            stride=(2, 1),
+                            padding=(2, 0),
+                            output_padding=(1, 0),
                         )
                     )
                 )
 
+        # set LSTM params
+        self.flatten_parameters()
+
+    def flatten_parameters(self):
+        if isinstance(self.rnn, nn.LSTM):
+            self.rnn.flatten_parameters()
+
     @staticmethod
     def skip_connect(decoder_in, encoder_out):
-        decoder_in_real, decoder_in_imag = paddle.chunk(decoder_in, 2, axis=1)
-        encoder_out_real, encoder_out_imag = paddle.chunk(encoder_out, 2, axis=1)
-        out_real = paddle.concat([decoder_in_real, encoder_out_real], axis=1)
-        out_imag = paddle.concat([decoder_in_imag, encoder_out_imag], axis=1)
-        return paddle.concat([out_real, out_imag], axis=1)
+        decoder_in_real, decoder_in_imag = torch.chunk(decoder_in, 2, axis=1)
+        encoder_out_real, encoder_out_imag = torch.chunk(encoder_out, 2, axis=1)
+        out_real = torch.cat([decoder_in_real, encoder_out_real], axis=1)
+        out_imag = torch.cat([decoder_in_imag, encoder_out_imag], axis=1)
+        return torch.cat([out_real, out_imag], axis=1)
 
     @staticmethod
     def loss(enh, clean):
-        return -(paddle.mean(SI_SDR(enh, clean)))
+        return -(torch.mean(SI_SDR(enh, clean)))
+
+    def print_networks(self, input_size=(2, 480000)):
+        summary(self, input_size=input_size)
 
     def forward(self, noisy):
         # noisy [B, S]
 
-        # stft
-        # [B, F, T]
-        noisy_spec = stft(noisy, self.n_fft, hop_length=self.hop_len, win_length=self.win_len, window=self.window)
+        # [B, F, T, 2]
+        noisy_spec = torch.stft(
+            noisy,
+            self.n_fft,
+            hop_length=self.hop_len,
+            win_length=self.win_len,
+            window=self.window,
+            return_complex=False,
+        )
+        # [B, F, T, 2] -> [B, 2, F, T]
+        noisy_spec = noisy_spec.permute(0, 3, 1, 2)
 
-        # get noisy_spec_real, noisy_spec_imag
-        # [B, F, T]
-        noisy_spec_real = paddle.real(noisy_spec)
-        noisy_spec_imag = paddle.imag(noisy_spec)
-        # -> [B, 2, F, T]
-        noisy_spec = paddle.stack([noisy_spec_real, noisy_spec_imag], axis=1)
         # dropout first bin
         out = noisy_spec[:, :, 1:, :]
 
         # check num_channels
         [_, num_channels, _, _] = out.shape
         assert num_channels == 2
-
-        # norm
-        # if self.mode in ["train", "valid"]:
-        #     # [B, 2, F, T]
-        #     out = offline_laplace_norm(out)
-        # else:
-        #     # [B, 2, F, T]
-        #     out = cumulative_laplace_norm(out)
 
         # encoder
         encoder_out = []
@@ -331,23 +345,29 @@ class DCCRN(nn.Layer):
 
         # mask
         mask = F.pad(out, [0, 0, 1, 0])
-        enh_spec_real = mask[:, 0, :, :] * noisy_spec_real - mask[:, 1, :, :] * noisy_spec_imag
-        enh_spec_imag = mask[:, 1, :, :] * noisy_spec_real + mask[:, 0, :, :] * noisy_spec_imag
-        enh_spec = paddle.squeeze(enh_spec_real + 1j * enh_spec_imag, axis=1)
+        enh_spec_real = mask[:, 0, :, :] * noisy_spec[:, 0, :, :] - mask[:, 1, :, :] * noisy_spec[:, 1, :, :]
+        enh_spec_imag = mask[:, 1, :, :] * noisy_spec[:, 0, :, :] + mask[:, 0, :, :] * noisy_spec[:, 1, :, :]
+        # [B, F, T]
+        enh_spec = enh_spec_real + 1j * enh_spec_imag
 
-        # istft
         # [B, S]
-        enh = istft(enh_spec, self.n_fft, hop_length=self.hop_len, win_length=self.win_len, window=self.window)
-        enh = paddle.clip(enh, min=-1.0, max=1.0)
+        enh = torch.istft(
+            enh_spec,
+            self.n_fft,
+            hop_length=self.hop_len,
+            win_length=self.win_len,
+            window=self.window,
+            return_complex=False,
+        )
+        enh = torch.clamp(enh, min=-1.0, max=1.0)
 
         return enh
 
 
 if __name__ == "__main__":
     # config device
-    device = paddle.get_device()
-    paddle.set_device(device)
-    print(f"device {device}")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(device)
 
     # get config
     toml_path = os.path.join(os.path.dirname(__file__), "config.toml")
@@ -357,38 +377,36 @@ if __name__ == "__main__":
     clip_grad_norm_value = config["train"]["clip_grad_norm_value"]
 
     # config model
-    model = DCCRN(config, mode="train")
-    print(
-        paddle.summary(
-            model,
-            input_size=(
-                config["dataloader"]["batch_size"][0],
-                int(config["dataset"]["sr"] * config["dataset"]["audio_len"]),
-            ),
-        )
-    )
+    model = DCCRN(config, mode="train", device=device)
+    model = model.to(device)
+    model.print_networks()
 
     # config optimizer
-    optimizer = getattr(paddle.optimizer, config["train"]["optimizer"])(
-        parameters=model.parameters(),
-        learning_rate=config["train"]["lr"],
-        grad_clip=nn.ClipGradByNorm(clip_norm=clip_grad_norm_value),
+    optimizer = getattr(torch.optim, config["train"]["optimizer"])(
+        params=model.parameters(),
+        lr=config["train"]["lr"],
     )
 
     # scaler
-    scaler = paddle.amp.GradScaler()
+    scaler = GradScaler(enabled=use_amp)
 
     # gen test data
-    noisy = paddle.randn([3, 48000]).astype(paddle.float32)  # [B, S]
-    clean = paddle.randn([3, 48000]).astype(paddle.float32)  # [B, S]
+    noisy = torch.randn([3, 48000])  # [B, S]
+    clean = torch.randn([3, 48000])  # [B, S]
+
+    # to device
+    noisy = noisy.to(device)
+    clean = clean.to(device)
 
     # test model and optimizer
-    with paddle.amp.auto_cast(enable=use_amp):
+    optimizer.zero_grad()
+    with autocast(enabled=use_amp):
         enh = model(noisy)
         loss = model.loss(enh, clean)
-    scaled = scaler.scale(loss)
-    scaled.backward()
-    scaler.minimize(optimizer, scaled)
-    optimizer.clear_grad()
+    scaler.scale(loss).backward()
+    scaler.unscale_(optimizer)
+    torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_norm_value)
+    scaler.step(optimizer)
+    scaler.update()
 
     pass
