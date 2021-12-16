@@ -77,7 +77,7 @@ class Trainer:
             self.optimizer,
             mode="min",
             factor=0.5,
-            patience=0,
+            patience=int(10 // self.valid_interval - 1),
             verbose=True,
         )
 
