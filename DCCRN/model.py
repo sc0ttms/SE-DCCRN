@@ -54,10 +54,7 @@ class ComplexConv2d(nn.Module):
             nn.init.constant_(m.bias.data, 0.0)
 
     def forward(self, input):
-        # [B, C, F, T]
-        [_, num_channels, _, _] = input.shape
-        assert num_channels // 2 == self.in_channels
-
+        # input [B, C, F, T]
         # pad [left, right, top, bottom]
         input = F.pad(input, [self.padding[1], 0, 0, 0])
 
