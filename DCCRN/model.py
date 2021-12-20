@@ -174,10 +174,7 @@ class ComplexConvTranspose2d(nn.Module):
             nn.init.constant_(m.bias.data, 0.0)
 
     def forward(self, input):
-        # [B, C, F, T]
-        [_, num_channels, _, _] = input.shape
-        assert num_channels // 2 == self.in_channels
-
+        # input [B, C, F, T]
         # get real, imag
         # [B, C // 2, F, T]
         real, imag = torch.chunk(input, 2, axis=1)
