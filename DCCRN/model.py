@@ -318,10 +318,6 @@ class DCCRN(nn.Module):
         # dropout first bin
         out = noisy_spec[:, :, 1:, :]
 
-        # check num_channels
-        [_, num_channels, _, _] = out.shape
-        assert num_channels == 2
-
         # encoder
         encoder_out = []
         for i, layer in enumerate(self.encoder):
@@ -340,8 +336,11 @@ class DCCRN(nn.Module):
         mask = F.pad(out, [0, 0, 1, 0])
         enh_spec_real = mask[:, 0, :, :] * noisy_spec[:, 0, :, :] - mask[:, 1, :, :] * noisy_spec[:, 1, :, :]
         enh_spec_imag = mask[:, 1, :, :] * noisy_spec[:, 0, :, :] + mask[:, 0, :, :] * noisy_spec[:, 1, :, :]
-        # [B, F, T]
-        enh_spec = enh_spec_real + 1j * enh_spec_imag
+        # [B, F, T] -> [B, F, T, 1]
+        enh_spec_real = enh_spec_real.unsqueeze(dim=3)
+        enh_spec_imag = enh_spec_imag.unsqueeze(dim=3)
+        # [B, F, T, 1] -> [B, F, T, 2]
+        enh_spec = torch.cat([enh_spec_real, enh_spec_imag], dim=3)
 
         # [B, S]
         enh = torch.istft(
