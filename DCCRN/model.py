@@ -102,7 +102,6 @@ class ComplexLSTM(nn.Module):
     def forward(self, input):
         # [B, C, F, T]
         [batch_size, num_channels, num_freqs, num_frames] = input.shape
-        assert (num_channels // 2) * num_freqs == self.input_size
 
         # get real, imag
         # [B, C // 2, F, T]
