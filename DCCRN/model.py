@@ -67,7 +67,7 @@ class ComplexConv2d(nn.Module):
         ii = self.conv2d_imag(imag)
         ri = self.conv2d_imag(real)
         ir = self.conv2d_real(imag)
-        real = rr - ii
+        real = rr + (-ii)
         imag = ri + ir
 
         # -> [B, C, F, T]
@@ -115,7 +115,7 @@ class ComplexLSTM(nn.Module):
         ii, _ = self.lstm_imag(imag)
         ri, _ = self.lstm_imag(real)
         ir, _ = self.lstm_real(imag)
-        real = rr - ii
+        real = rr + (-ii)
         imag = ri + ir
         if self.projection_size is not None:
             real = self.fc_real(real)
@@ -183,7 +183,7 @@ class ComplexConvTranspose2d(nn.Module):
         ii = self.conv_transpose2d_imag(imag)
         ri = self.conv_transpose2d_imag(real)
         ir = self.conv_transpose2d_real(imag)
-        real = rr - ii
+        real = rr + (-ii)
         imag = ri + ir
 
         # -> [B, C, F, T]
@@ -334,7 +334,7 @@ class DCCRN(nn.Module):
 
         # mask
         mask = F.pad(out, [0, 0, 1, 0])
-        enh_spec_real = mask[:, 0, :, :] * noisy_spec[:, 0, :, :] - mask[:, 1, :, :] * noisy_spec[:, 1, :, :]
+        enh_spec_real = mask[:, 0, :, :] * noisy_spec[:, 0, :, :] + (-mask[:, 1, :, :] * noisy_spec[:, 1, :, :])
         enh_spec_imag = mask[:, 1, :, :] * noisy_spec[:, 0, :, :] + mask[:, 0, :, :] * noisy_spec[:, 1, :, :]
         # [B, F, T] -> [B, F, T, 1]
         enh_spec_real = enh_spec_real.unsqueeze(dim=3)
