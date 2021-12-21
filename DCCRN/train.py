@@ -48,8 +48,8 @@ class Trainer:
         self.audio_len = config["dataset"]["audio_len"]
 
         # get meta args
-        self.use_amp = False if self.device == "cpu" else config["meta"]["use_amp"]
         self.use_quant = config["meta"]["use_quant"]
+        self.use_amp = False if self.device == "cpu" or self.use_quant else config["meta"]["use_amp"]
 
         # get train args
         self.resume = config["train"]["resume"]
