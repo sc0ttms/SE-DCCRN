@@ -184,9 +184,9 @@ class Trainer:
             return False
 
     def audio_visualization(self, noisy, clean, enh, name, epoch):
-        self.writer.add_audio(f"audio/noisy/{name}", noisy, epoch, sample_rate=self.sr)
-        self.writer.add_audio(f"audio/clean/{name}", clean, epoch, sample_rate=self.sr)
-        self.writer.add_audio(f"audio/enh/{name}", enh, epoch, sample_rate=self.sr)
+        self.writer.add_audio(f"audio/{name}/noisy", noisy, epoch, sample_rate=self.sr)
+        self.writer.add_audio(f"audio/{name}/clean", clean, epoch, sample_rate=self.sr)
+        self.writer.add_audio(f"audio/{name}/enh", enh, epoch, sample_rate=self.sr)
 
         # Visualize the spectrogram of noisy speech, clean speech, and enhanced speech
         noisy_mag, _ = librosa.magphase(librosa.stft(noisy, n_fft=320, hop_length=160, win_length=320))
