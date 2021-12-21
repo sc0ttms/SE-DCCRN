@@ -35,21 +35,21 @@ class Trainer:
         # set device
         self.device = device
 
+        # get meta args
+        self.use_quant = config["meta"]["use_quant"]
+        self.use_amp = False if self.device == "cpu" or self.use_quant else config["meta"]["use_amp"]
+
         # set path
         base_path = config["path"]["base"]
         os.makedirs(base_path, exist_ok=True)
         # get checkpoints path
         self.checkpoints_path = os.path.join(base_path, "checkpoints")
         # get logs path
-        self.logs_path = os.path.join(base_path, "logs", "train")
+        self.logs_path = os.path.join(base_path, "logs", "qunat_train" if self.use_quant else "train")
 
         # get dataset args
         self.sr = config["dataset"]["sr"]
         self.audio_len = config["dataset"]["audio_len"]
-
-        # get meta args
-        self.use_quant = config["meta"]["use_quant"]
-        self.use_amp = False if self.device == "cpu" or self.use_quant else config["meta"]["use_amp"]
 
         # get train args
         self.resume = config["train"]["resume"]
@@ -160,7 +160,6 @@ class Trainer:
             if self.use_quant:
                 self.quant_fx()
                 torch.save(self.quantized_model, os.path.join(self.checkpoints_path, "quantized_model.pth"))
-
 
     def resume_checkpoint(self):
         checkpoint_name = "latest_prepare_qat_model.tar" if self.use_quant == True else "latest_model.tar"
