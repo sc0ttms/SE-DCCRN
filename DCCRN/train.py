@@ -133,7 +133,8 @@ class Trainer:
         self.prepare_model = quantize_fx.prepare_qat_fx(model_to_quantize, self.qconfig_dict)
 
     def quant_fx(self):
-        self.quantized_model = quantize_fx.convert_fx(self.prepare_model)
+        best_prepare_qat_model = copy.deepcopy(self.prepare_model)
+        self.quantized_model = quantize_fx.convert_fx(best_prepare_qat_model)
 
     def save_checkpoint(self, epoch, is_best_epoch=False):
         print(f"Saving {epoch} epoch model checkpoint...")
@@ -155,6 +156,11 @@ class Trainer:
         if is_best_epoch:
             best_checkpoint_name = "best_prepare_qat_model.tar" if self.use_quant == True else "best_model.tar"
             torch.save(state_dict, os.path.join(self.checkpoints_path, best_checkpoint_name))
+
+            if self.use_quant:
+                self.quant_fx()
+                torch.save(self.quantized_model, os.path.join(self.checkpoints_path, "quantized_model.pth"))
+
 
     def resume_checkpoint(self):
         checkpoint_name = "latest_prepare_qat_model.tar" if self.use_quant == True else "latest_model.tar"
