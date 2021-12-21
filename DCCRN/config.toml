@@ -1,6 +1,7 @@
 [meta]
 seed = 0
 use_amp = true
+use_quant = false
 cudnn_enabled = false
 
 [path]
