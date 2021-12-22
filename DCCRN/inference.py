@@ -32,6 +32,7 @@ class Inferencer:
 
         # get meta args
         self.use_quant = config["meta"]["use_quant"]
+        self.use_prune = config["meta"]["use_prune"]
 
         # set path
         base_path = os.path.abspath(config["path"]["base"])
@@ -51,6 +52,13 @@ class Inferencer:
             self.output_path = os.path.join(base_path, "enhanced", "quant")
             self.logs_path = os.path.join(base_path, "logs", "inference", "quant")
             self.metrics_path = os.path.join(base_path, "metrics", "quant")
+
+        # set prune path
+        if self.use_prune:
+            self.checkpoints_path = os.path.join(base_path, "checkpoints", "prune")
+            self.output_path = os.path.join(base_path, "enhanced", "prune")
+            self.logs_path = os.path.join(base_path, "logs", "inference", "prune")
+            self.metrics_path = os.path.join(base_path, "metrics", "prune")
 
         prepare_empty_path([self.output_path, self.logs_path, self.metrics_path])
 
@@ -83,15 +91,23 @@ class Inferencer:
         )
 
     def load_checkpoint(self):
-        best_model_path = os.path.join(self.checkpoints_path, "best_model.tar")
+        if self.use_quant:
+            best_model_path = os.path.join(self.checkpoints_path, "quant_model.pth")
+        elif self.use_prune:
+            best_model_path = os.path.join(self.checkpoints_path, "prune_model.pth")
+        else:
+            best_model_path = os.path.join(self.checkpoints_path, "best_model.tar")
         assert os.path.exists(best_model_path)
 
         checkpoint = torch.load(best_model_path, map_location="cpu")
 
-        self.epoch = checkpoint["epoch"]
-        self.model.load_state_dict(checkpoint["model"])
-
-        print(f"Loading model checkpoint (epoch == {self.epoch})...")
+        if self.use_quant or self.use_prune:
+            self.model.load_state_dict(checkpoint)
+        else:
+            self.epoch = checkpoint["epoch"]
+            self.model.load_state_dict(checkpoint["model"])
+        
+        print(f"Loading model checkpoint...")
 
     def check_clipped(self, enh, enh_file):
         if is_clipped(enh):
