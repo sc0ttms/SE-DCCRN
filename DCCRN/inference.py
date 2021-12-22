@@ -37,19 +37,19 @@ class Inferencer:
         base_path = os.path.abspath(config["path"]["base"])
         os.makedirs(base_path, exist_ok=True)
         # get checkpoints path
-        self.checkpoints_path = os.path.join(base_path, "checkpoints")
+        self.checkpoints_path = os.path.join(base_path, "checkpoints", "normal")
         # get output path
-        self.output_path = os.path.join(base_path, "enhanced")
+        self.output_path = os.path.join(base_path, "enhanced", "normal")
         # get logs path
-        self.logs_path = os.path.join(base_path, "logs", "inference")
+        self.logs_path = os.path.join(base_path, "logs", "inference", "normal")
         # get metrics path
-        self.metrics_path = os.path.join(base_path, "metrics")
+        self.metrics_path = os.path.join(base_path, "metrics", "normal")
 
         # set quant path
         if self.use_quant:
-            self.output_path = os.path.join(base_path, "quant_enhanced")
-            self.logs_path = os.path.join(base_path, "logs", "quant_inference")
-            self.metrics_path = os.path.join(base_path, "quant_metrics")
+            self.output_path = os.path.join(base_path, "enhanced", "quant")
+            self.logs_path = os.path.join(base_path, "logs", "inference", "quant")
+            self.metrics_path = os.path.join(base_path, "metrics", "quant")
 
         prepare_empty_path([self.output_path, self.logs_path, self.metrics_path])
 
