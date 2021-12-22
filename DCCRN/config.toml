@@ -1,10 +1,11 @@
 [meta]
 seed = 0
 use_amp = true
+cudnn_enabled = false
 use_quant = false
 use_prune = false
 iter_prune = false
-cudnn_enabled = false
+use_kd = false
 
 [path]
 # base = "./output/DCCRN"
@@ -48,3 +49,13 @@ n_folds = 1
 n_jobs = 8
 audio_len = 30.0
 audio_visual_samples = 2
+
+[kd.model]
+encoder_decoder_num_channels = [2, 16, 32, 64, 128, 128, 128]
+encoder_decoder_kernel_size = 5
+rnn_hidden_size = 128
+rnn_num_layers = 2
+look_ahead = 1
+
+[kd.train]
+alpha = 0.5

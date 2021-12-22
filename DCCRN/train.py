@@ -33,7 +33,7 @@ plt.switch_backend("agg")
 class Trainer:
     def __init__(self, model, train_iter, valid_iter, config, device):
         # set model
-        self.model = model.to(device)
+        self.model = model
         # set device
         self.device = device
 
@@ -41,6 +41,7 @@ class Trainer:
         self.use_quant = config["meta"]["use_quant"]
         self.use_prune = config["meta"]["use_prune"]
         self.iter_prune = config["meta"]["iter_prune"]
+        self.use_kd = config["meta"]["use_kd"]
         self.use_amp = False if self.device == "cpu" or self.use_quant else config["meta"]["use_amp"]
 
         # set path
@@ -60,6 +61,20 @@ class Trainer:
         if self.use_prune:
             self.checkpoints_path = os.path.join(base_path, "checkpoints", "prune")
             self.logs_path = os.path.join(base_path, "logs", "train", "prune")
+
+        # set kd path and model
+        if self.use_kd:
+            self.teacher_model = copy.deepcopy(self.model)
+
+            self.checkpoints_path = os.path.join(base_path, "checkpoints", "kd")
+            self.logs_path = os.path.join(base_path, "logs", "train", "kd")
+
+            kd_model_config = copy.deepcopy(config["kd"]["model"])
+            config["model"] = kd_model_config
+            self.model = DCCRN(config, mode="train", device=device)
+
+            # get kd args
+            self.alpha = config["kd"]["train"]["alpha"]
 
         # get dataset args
         self.sr = config["dataset"]["sr"]
@@ -120,6 +135,9 @@ class Trainer:
         if self.use_prune:
             self.uniform_l1_norm_prune(is_iter_prune=self.iter_prune)
 
+        if self.use_kd:
+            self.load_teacher_checkpoint()
+
         # resume
         if self.resume:
             self.resume_checkpoint()
@@ -178,6 +196,15 @@ class Trainer:
         for _, module in self.prune_model.named_modules():
             if isinstance(module, (nn.Conv2d, nn.Linear, nn.ConvTranspose2d)):
                 prune.remove(module, name="weight")
+
+    def load_teacher_checkpoint(self):
+        model_path = os.path.join(self.checkpoints_path, "..", "normal", "best_model.tar")
+        assert os.path.exists(model_path)
+        checkpoint = torch.load(model_path, map_location="cpu")
+
+        self.teacher_model.load_state_dict(checkpoint["model"])
+
+        print(f"Load teacher model done...")
 
     def save_checkpoint(self, epoch, is_best_epoch=False):
         print(f"Saving {epoch} epoch model checkpoint...")
@@ -295,6 +322,12 @@ class Trainer:
     def set_model_to_eval_mode(self):
         self.model.eval()
 
+    def set_teacher_model_to_train_mode(self):
+        self.teacher_model.train()
+
+    def set_teacher_model_to_eval_mode(self):
+        self.teacher_model.eval()
+
     def train_epoch(self, epoch):
         loss_total = 0.0
         for noisy, clean in tqdm(self.train_iter, desc="train"):
@@ -302,9 +335,18 @@ class Trainer:
             clean = clean.to(self.device)
 
             self.optimizer.zero_grad()
-            with autocast(enabled=self.use_amp):
-                enh = self.model(noisy)
-                loss = self.model.loss(enh, clean)
+            if self.use_kd:
+                with torch.no_grad():
+                    teacher_enh = self.teacher_model(noisy)
+                with autocast(enabled=self.use_amp):
+                    enh = self.model(noisy)
+                    loss_hard = self.model.loss(enh, clean)
+                    loss_soft = self.model.loss(enh, teacher_enh)
+                    loss = self.alpha * loss_hard + (1.0 - self.alpha) * loss_soft
+            else:
+                with autocast(enabled=self.use_amp):
+                    enh = self.model(noisy)
+                    loss = self.model.loss(enh, clean)
 
             self.scaler.scale(loss).backward()
             self.scaler.unscale_(self.optimizer)
@@ -367,6 +409,8 @@ class Trainer:
             print(f"{'=' * 20} {epoch} epoch start {'=' * 20}")
 
             # train
+            if self.use_kd:
+                self.set_teacher_model_to_eval_mode()
             self.set_model_to_train_mode()
             self.train_epoch(epoch)
 
