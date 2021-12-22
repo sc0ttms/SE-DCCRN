@@ -2,6 +2,7 @@
 
 import os
 import zipfile
+import torch
 from tqdm import tqdm
 
 
@@ -43,3 +44,14 @@ def prepare_empty_path(paths, resume=False):
             assert os.path.exists(path)
         else:
             os.makedirs(path, exist_ok=True)
+
+
+def print_size_of_model(model):
+    """print size of model
+
+    Args:
+        model (torch.nn.Module): model
+    """
+    torch.save(model.state_dict(), "temp.p")
+    print("Size (MB):", os.path.getsize("temp.p") / 1e6)
+    os.remove("temp.p")
