@@ -45,7 +45,11 @@ class Trainer:
         # get checkpoints path
         self.checkpoints_path = os.path.join(base_path, "checkpoints")
         # get logs path
-        self.logs_path = os.path.join(base_path, "logs", "qunat_train" if self.use_quant else "train")
+        self.logs_path = os.path.join(base_path, "logs", "train")
+
+        # set quant path
+        if self.use_quant:
+            self.logs_path = os.path.join(base_path, "logs", "quant_train")
 
         # get dataset args
         self.sr = config["dataset"]["sr"]
