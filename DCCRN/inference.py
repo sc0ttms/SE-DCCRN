@@ -30,6 +30,9 @@ class Inferencer:
         # get device
         self.device = device
 
+        # get meta args
+        self.use_quant = config["meta"]["use_quant"]
+
         # set path
         base_path = os.path.abspath(config["path"]["base"])
         os.makedirs(base_path, exist_ok=True)
@@ -41,6 +44,13 @@ class Inferencer:
         self.logs_path = os.path.join(base_path, "logs", "inference")
         # get metrics path
         self.metrics_path = os.path.join(base_path, "metrics")
+
+        # set quant path
+        if self.use_quant:
+            self.output_path = os.path.join(base_path, "quant_enhanced")
+            self.logs_path = os.path.join(base_path, "logs", "quant_inference")
+            self.metrics_path = os.path.join(base_path, "quant_metrics")
+
         prepare_empty_path([self.output_path, self.logs_path, self.metrics_path])
 
         # set iter
