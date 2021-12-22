@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 import torch
+import torch.nn as nn
+import torch.nn.utils.prune as prune
 import torch.quantization.quantize_fx as quantize_fx
 from torch.fx import symbolic_trace
 from torch.utils.data import DataLoader
@@ -37,6 +39,8 @@ class Trainer:
 
         # get meta args
         self.use_quant = config["meta"]["use_quant"]
+        self.use_prune = config["meta"]["use_prune"]
+        self.iter_prune = config["meta"]["iter_prune"]
         self.use_amp = False if self.device == "cpu" or self.use_quant else config["meta"]["use_amp"]
 
         # set path
@@ -51,6 +55,11 @@ class Trainer:
         if self.use_quant:
             self.checkpoints_path = os.path.join(base_path, "checkpoints", "quant")
             self.logs_path = os.path.join(base_path, "logs", "train", "quant")
+
+        # set prune path
+        if self.use_prune:
+            self.checkpoints_path = os.path.join(base_path, "checkpoints", "prune")
+            self.logs_path = os.path.join(base_path, "logs", "train", "prune")
 
         # get dataset args
         self.sr = config["dataset"]["sr"]
@@ -107,6 +116,10 @@ class Trainer:
         if self.use_quant:
             self.prepare_qat()
 
+        # prune
+        if self.use_prune:
+            self.uniform_l1_norm_prune(is_iter_prune=self.iter_prune)
+
         # resume
         if self.resume:
             self.resume_checkpoint()
@@ -141,6 +154,29 @@ class Trainer:
         best_prepare_qat_model = copy.deepcopy(self.model)
         self.quantized_model = quantize_fx.convert_fx(best_prepare_qat_model)
 
+    def uniform_l1_norm_prune(self, is_iter_prune=False):
+        # load best model
+        if is_iter_prune:
+            model_path = os.path.join(self.checkpoints_path, "prune_model.pth")
+        else:
+            model_path = os.path.join(self.checkpoints_path, "..", "normal", "best_model.tar")
+        assert os.path.exists(model_path)
+        checkpoint = torch.load(model_path, map_location="cpu")
+        if is_iter_prune:
+            self.model.load_state_dict(checkpoint)
+        else:
+            self.model.load_state_dict(checkpoint["model"])
+
+        for _, module in self.model.named_modules():
+            if isinstance(module, (nn.Conv2d, nn.Linear, nn.ConvTranspose2d)):
+                prune.ln_structured(module, name="weight", amount=0.2, n=1, dim=0)
+
+    def permanent_prune(self):
+        self.prune_model = copy.deepcopy(self.model)
+        for _, module in self.prune_model.named_modules():
+            if isinstance(module, (nn.Conv2d, nn.Linear, nn.ConvTranspose2d)):
+                prune.remove(module, name="weight")
+
     def save_checkpoint(self, epoch, is_best_epoch=False):
         print(f"Saving {epoch} epoch model checkpoint...")
 
@@ -159,10 +195,27 @@ class Trainer:
         # save best_model.tar
         if is_best_epoch:
             torch.save(state_dict, os.path.join(self.checkpoints_path, "best_model.tar"))
+            torch.save(state_dict["model"], os.path.join(self.checkpoints_path, "best_model.pth"))
 
             if self.use_quant:
                 self.quant_fx()
-                torch.save(self.quantized_model, os.path.join(self.checkpoints_path, "quantized_model.pth"))
+                torch.save(
+                    self.quantized_model.state_dict(),
+                    os.path.join(
+                        self.checkpoints_path,
+                        "quantized_model.pth",
+                    ),
+                )
+
+            if self.use_prune:
+                self.permanent_prune()
+                torch.save(
+                    self.prune_model.state_dict(),
+                    os.path.join(
+                        self.checkpoints_path,
+                        "prune_model.pth",
+                    ),
+                )
 
     def resume_checkpoint(self):
         model_path = os.path.join(self.checkpoints_path, "latest_model.tar")
@@ -178,7 +231,9 @@ class Trainer:
         self.model.load_state_dict(checkpoint["model"])
         self.scaler.load_state_dict(checkpoint["scaler"])
 
-        print(f"use quant {self.use_quant} Model checkpoint loaded. Training will begin at {self.start_epoch} epoch.")
+        print(f"use quant {self.use_quant}")
+        print(f"use prune {self.use_prune}")
+        print(f"Model checkpoint loaded. Training will begin at {self.start_epoch} epoch.")
 
     def is_best_epoch(self, score):
         if score > self.best_score:
