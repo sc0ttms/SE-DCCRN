@@ -158,12 +158,14 @@ class Trainer:
         # load best model
         if is_iter_prune:
             model_path = os.path.join(self.checkpoints_path, "prune_model.pth")
+            best_model_path = os.path.join(self.checkpoints_path, "best_model.tar")
         else:
             model_path = os.path.join(self.checkpoints_path, "..", "normal", "best_model.tar")
         assert os.path.exists(model_path)
         checkpoint = torch.load(model_path, map_location="cpu")
         if is_iter_prune:
             self.model.load_state_dict(checkpoint)
+            self.best_score = torch.load(best_model_path, map_location="cpu")["best_score"]
         else:
             self.model.load_state_dict(checkpoint["model"])
 
