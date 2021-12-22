@@ -47,6 +47,7 @@ class Inferencer:
 
         # set quant path
         if self.use_quant:
+            self.checkpoints_path = os.path.join(base_path, "checkpoints", "quant")
             self.output_path = os.path.join(base_path, "enhanced", "quant")
             self.logs_path = os.path.join(base_path, "logs", "inference", "quant")
             self.metrics_path = os.path.join(base_path, "metrics", "quant")
