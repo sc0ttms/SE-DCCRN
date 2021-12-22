@@ -43,13 +43,14 @@ class Trainer:
         base_path = config["path"]["base"]
         os.makedirs(base_path, exist_ok=True)
         # get checkpoints path
-        self.checkpoints_path = os.path.join(base_path, "checkpoints")
+        self.checkpoints_path = os.path.join(base_path, "checkpoints", "normal")
         # get logs path
-        self.logs_path = os.path.join(base_path, "logs", "train")
+        self.logs_path = os.path.join(base_path, "logs", "train", "normal")
 
         # set quant path
         if self.use_quant:
-            self.logs_path = os.path.join(base_path, "logs", "quant_train")
+            self.checkpoints_path = os.path.join(base_path, "checkpoints", "quant")
+            self.logs_path = os.path.join(base_path, "logs", "train", "quant")
 
         # get dataset args
         self.sr = config["dataset"]["sr"]
@@ -127,17 +128,17 @@ class Trainer:
 
     def prepare_qat(self):
         # load best model
-        model_path = os.path.join(self.checkpoints_path, "best_model.tar")
+        model_path = os.path.join(self.checkpoints_path, "..", "normal", "best_model.tar")
         assert os.path.exists(model_path)
         checkpoint = torch.load(model_path, map_location="cpu")
         self.model.load_state_dict(checkpoint["model"])
         # get graph module
         gm = symbolic_trace(self.model)
         model_to_quantize = copy.deepcopy(gm)
-        self.prepare_model = quantize_fx.prepare_qat_fx(model_to_quantize, self.qconfig_dict)
+        self.model = quantize_fx.prepare_qat_fx(model_to_quantize, self.qconfig_dict)
 
     def quant_fx(self):
-        best_prepare_qat_model = copy.deepcopy(self.prepare_model)
+        best_prepare_qat_model = copy.deepcopy(self.model)
         self.quantized_model = quantize_fx.convert_fx(best_prepare_qat_model)
 
     def save_checkpoint(self, epoch, is_best_epoch=False):
@@ -146,28 +147,25 @@ class Trainer:
         state_dict = {
             "epoch": epoch,
             "best_score": self.best_score,
-            "model": self.model.state_dict() if self.use_quant == False else self.prepare_model.state_dict(),
+            "model": self.model.state_dict(),
             "scheduler": self.scheduler.state_dict(),
             "optimizer": self.optimizer.state_dict(),
             "scaler": self.scaler.state_dict(),
         }
 
         # save latest_model.tar or latest_prepare_qat_model.tar
-        checkpoint_name = "latest_prepare_qat_model.tar" if self.use_quant == True else "latest_model.tar"
-        torch.save(state_dict, os.path.join(self.checkpoints_path, checkpoint_name))
+        torch.save(state_dict, os.path.join(self.checkpoints_path, "latest_model.tar"))
 
         # save best_model.tar
         if is_best_epoch:
-            best_checkpoint_name = "best_prepare_qat_model.tar" if self.use_quant == True else "best_model.tar"
-            torch.save(state_dict, os.path.join(self.checkpoints_path, best_checkpoint_name))
+            torch.save(state_dict, os.path.join(self.checkpoints_path, "best_model.tar"))
 
             if self.use_quant:
                 self.quant_fx()
                 torch.save(self.quantized_model, os.path.join(self.checkpoints_path, "quantized_model.pth"))
 
     def resume_checkpoint(self):
-        checkpoint_name = "latest_prepare_qat_model.tar" if self.use_quant == True else "latest_model.tar"
-        model_path = os.path.join(self.checkpoints_path, checkpoint_name)
+        model_path = os.path.join(self.checkpoints_path, "latest_model.tar")
 
         assert os.path.exists(model_path)
 
@@ -177,13 +175,10 @@ class Trainer:
         self.best_score = checkpoint["best_score"]
         self.scheduler.load_state_dict(checkpoint["scheduler"])
         self.optimizer.load_state_dict(checkpoint["optimizer"])
-        if self.use_quant:
-            self.prepare_model.load_state_dict(checkpoint["model"])
-        else:
-            self.model.load_state_dict(checkpoint["model"])
+        self.model.load_state_dict(checkpoint["model"])
         self.scaler.load_state_dict(checkpoint["scaler"])
 
-        print(f"Model checkpoint loaded. Training will begin at {self.start_epoch} epoch.")
+        print(f"use quant {self.use_quant} Model checkpoint loaded. Training will begin at {self.start_epoch} epoch.")
 
     def is_best_epoch(self, score):
         if score > self.best_score:
@@ -238,16 +233,10 @@ class Trainer:
         return ((metrics["STOI"]) + transform_pesq_range(metrics["WB_PESQ"])) / 2
 
     def set_model_to_train_mode(self):
-        if self.use_quant:
-            self.prepare_model.train()
-        else:
-            self.model.train()
+        self.model.train()
 
     def set_model_to_eval_mode(self):
-        if self.use_quant:
-            self.prepare_model.eval()
-        else:
-            self.model.eval()
+        self.model.eval()
 
     def train_epoch(self, epoch):
         loss_total = 0.0
@@ -257,15 +246,12 @@ class Trainer:
 
             self.optimizer.zero_grad()
             with autocast(enabled=self.use_amp):
-                enh = self.model(noisy) if self.use_quant == False else self.prepare_model(noisy)
+                enh = self.model(noisy)
                 loss = self.model.loss(enh, clean)
 
             self.scaler.scale(loss).backward()
             self.scaler.unscale_(self.optimizer)
-            torch.nn.utils.clip_grad_norm_(
-                self.model.parameters() if self.use_quant == False else self.prepare_model.parameters(),
-                self.clip_grad_norm_value,
-            )
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_grad_norm_value)
             self.scaler.step(self.optimizer)
             self.scaler.update()
 
@@ -287,7 +273,7 @@ class Trainer:
             noisy = noisy.to(self.device)
             clean = clean.to(self.device)
 
-            enh = self.model(noisy) if self.use_quant == False else self.prepare_model(noisy)
+            enh = self.model(noisy)
             loss = self.model.loss(enh, clean)
 
             loss_total += loss.item()
