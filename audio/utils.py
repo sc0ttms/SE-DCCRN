@@ -55,3 +55,23 @@ def print_size_of_model(model):
     torch.save(model.state_dict(), "temp.p")
     print("Size (MB):", os.path.getsize("temp.p") / 1e6)
     os.remove("temp.p")
+
+
+def print_networks(models: list):
+    """print networks
+
+    Args:
+        models (list): models list
+    """
+    print(f"Contains {len(models)} models, the number of the parameters is: ")
+
+    params_of_all_networks = 0
+    for idx, model in enumerate(models, start=1):
+        params_of_network = 0
+        for param in model.parameters():
+            params_of_network += param.numel()
+
+        print(f"\tNetwork {idx}: {params_of_network / 1e6} million.")
+        params_of_all_networks += params_of_network
+
+    print(f"The amount of parameters in the project is {params_of_all_networks / 1e6} million.")
