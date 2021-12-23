@@ -31,7 +31,7 @@ patience = 0
 verbose = true
 
 [dataloader]
-batch_size = [85, 20]
+batch_size = [130, 40]
 num_workers = 8
 drop_last = false
 pin_memory = false
