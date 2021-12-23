@@ -299,9 +299,6 @@ class BaseTrainer:
             enh_list = np.concatenate([enh_list, enh], axis=0) if len(enh_list) else enh
             noisy_files = np.concatenate([noisy_files, noisy_file], axis=0) if len(noisy_files) else noisy_file
 
-        # update learning rate
-        self.scheduler.step(loss_total / len(self.valid_iter))
-
         # visual audio
         for i in range(self.visual_samples):
             self.audio_visualization(noisy_list[i], clean_list[i], enh_list[i], os.path.basename(noisy_files[i]), epoch)
@@ -343,6 +340,9 @@ class BaseTrainer:
 
                 self.set_model_to_eval_mode()
                 metric_score = self.valid_epoch(epoch)
+
+                # update learning rate
+                self.scheduler.step((-metric_score) * 10)
 
                 if self.is_best_epoch(metric_score):
                     self.save_checkpoint(epoch, is_best_epoch=True)
