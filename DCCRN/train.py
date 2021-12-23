@@ -71,7 +71,7 @@ class Trainer:
 
             kd_model_config = copy.deepcopy(config["kd"]["model"])
             config["model"] = kd_model_config
-            self.model = DCCRN(config, mode="train", device=device)
+            self.model = DCCRN(config, mode="train", device=self.device).to(self.device)
 
             # get kd args
             self.alpha = config["kd"]["train"]["alpha"]
@@ -113,7 +113,7 @@ class Trainer:
 
         # config optimizer
         self.optimizer = getattr(torch.optim, config["train"]["optimizer"])(
-            params=model.parameters(),
+            params=self.model.parameters(),
             lr=config["train"]["lr"],
         )
         self.scheduler = ReduceLROnPlateau(
@@ -203,6 +203,7 @@ class Trainer:
         checkpoint = torch.load(model_path, map_location="cpu")
 
         self.teacher_model.load_state_dict(checkpoint["model"])
+        self.teacher_model.to(self.device)
 
         print(f"Load teacher model done...")
 
