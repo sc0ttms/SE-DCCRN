@@ -261,6 +261,9 @@ class BaseTrainer:
 
             loss_total += loss.item()
 
+        # update learning rate
+        self.scheduler.step(loss_total / len(self.train_iter))
+
         # logs
         self.writer.add_scalar("loss/train", loss_total / len(self.train_iter), epoch)
         self.writer.add_scalar("lr", self.optimizer.state_dict()["param_groups"][0]["lr"], epoch)
@@ -340,9 +343,6 @@ class BaseTrainer:
 
                 self.set_model_to_eval_mode()
                 metric_score = self.valid_epoch(epoch)
-
-                # update learning rate
-                self.scheduler.step((-metric_score) * 10)
 
                 if self.is_best_epoch(metric_score):
                     self.save_checkpoint(epoch, is_best_epoch=True)
