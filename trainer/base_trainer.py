@@ -39,6 +39,8 @@ class BaseTrainer:
         self.use_amp = False if self.device == "cpu" else config["meta"]["use_amp"]
         # get base path
         self.base_path = config["path"]["base"]
+        # get pre model path
+        self.pre_model_path = config["path"]["pre_model"]
         # get ppl args
         self.n_folds = config["ppl"]["n_folds"]
         self.n_jobs = config["ppl"]["n_jobs"]
@@ -101,6 +103,10 @@ class BaseTrainer:
     @staticmethod
     def loss(enh, clean):
         return -(torch.mean(SI_SDR(enh, clean)))
+
+    def load_pre_model(self):
+        load_model = torch.load(self.pre_model_path, map_location="cpu")
+        self.model.load_state_dict(load_model)
 
     def init_logs(self):
         # init logs
@@ -337,6 +343,10 @@ class BaseTrainer:
     def __call__(self):
         # to device
         self.model.to(self.device)
+
+        # init pre load model
+        if self.pre_model_path:
+            self.load_pre_model()
 
         # resume
         if self.resume:
