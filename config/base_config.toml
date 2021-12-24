@@ -27,7 +27,7 @@ clip_grad_norm_value = 10.0
 name = "ReduceLROnPlateau"
 mode = "min"
 factor = 0.5
-patience = 5
+patience = [2, 0]
 verbose = true
 
 [dataloader]
