@@ -314,15 +314,15 @@ class BaseTrainer:
         return metrics_score
 
     def __call__(self):
+        # to device
+        self.model.to(self.device)
+
         # resume
         if self.resume:
             self.resume_checkpoint()
 
         # init logs
         self.init_logs()
-
-        # to device
-        self.model = self.model.to(self.device)
 
         # loop train
         for epoch in range(self.start_epoch, self.epochs + 1):
