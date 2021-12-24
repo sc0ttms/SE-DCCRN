@@ -88,12 +88,13 @@ class BaseTrainer:
         )
 
         # init lr scheduler
-        self.scheduler_metric = 0.0
         self.scheduler = getattr(torch.optim.lr_scheduler, config["lr_scheduler"]["name"])(
             self.optimizer,
-            mode=config["lr_scheduler"]["mode"],
-            factor=config["lr_scheduler"]["factor"],
-            patience=config["lr_scheduler"]["patience"][0],
+            base_lr=config["lr_scheduler"]["base_lr"],
+            max_lr=config["lr_scheduler"]["max_lr"],
+            step_size_up=config["lr_scheduler"]["step_size_up"],
+            step_size_down=config["lr_scheduler"]["step_size_down"],
+            cycle_momentum=config["lr_scheduler"]["cycle_momentum"],
             verbose=config["lr_scheduler"]["verbose"],
         )
 
@@ -206,16 +207,6 @@ class BaseTrainer:
 
         return ((metrics["STOI"]) + transform_pesq_range(metrics["WB_PESQ"])) / 2
 
-    def update_scheduler_metric(self, metric):
-        self.scheduler_metric = metric
-
-    def reconfig_scheduler(self, best, patience):
-        self.scheduler.best = best
-        self.scheduler.patience = patience
-
-    def update_scheduler(self):
-        self.scheduler.step(self.scheduler_metric)
-
     def set_model_to_train_mode(self):
         self.model.train()
 
@@ -279,9 +270,6 @@ class BaseTrainer:
 
             loss_total += loss.item()
 
-        # update scheduler metric
-        self.update_scheduler_metric(loss_total / len(self.train_iter))
-
         # logs
         self.writer.add_scalar("loss/train", loss_total / len(self.train_iter), epoch)
         self.writer.add_scalar("lr", self.optimizer.state_dict()["param_groups"][0]["lr"], epoch)
@@ -332,12 +320,6 @@ class BaseTrainer:
             enh_list, clean_list, epoch, n_folds=self.n_folds, n_jobs=self.n_jobs
         )
 
-        # reconfig scheduler
-        if epoch == self.valid_start_epoch:
-            self.reconfig_scheduler((-metrics_score) * 10 + 1.0, self.config["lr_scheduler"]["patience"][0])
-        # update scheduler metric
-        self.update_scheduler_metric((-metrics_score) * 10)
-
         return metrics_score
 
     def __call__(self):
@@ -361,6 +343,8 @@ class BaseTrainer:
 
             self.set_model_to_train_mode()
             self.train_epoch(epoch)
+            # update lr
+            self.scheduler.step()
 
             if self.save_checkpoint_interval != 0 and (epoch % self.save_checkpoint_interval == 0):
                 self.save_checkpoint(epoch)
@@ -374,9 +358,6 @@ class BaseTrainer:
 
                 if self.is_best_epoch(metric_score):
                     self.save_checkpoint(epoch, is_best_epoch=True)
-
-            # update learning rate
-            self.update_scheduler()
 
             print(f"{'=' * 20} {epoch} epoch end {'=' * 20}")
 
