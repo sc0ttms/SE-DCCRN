@@ -58,6 +58,7 @@ class BaseTrainer:
         # get train args
         self.resume = config["train"]["resume"]
         self.epochs = config["train"]["epochs"]
+        self.valid_start_epoch = config["train"]["valid_start_epoch"]
         self.valid_interval = config["train"]["valid_interval"]
 
         # init cudnn
@@ -338,7 +339,7 @@ class BaseTrainer:
                 self.save_checkpoint(epoch)
 
             # valid
-            if epoch % self.valid_interval == 0:
+            if epoch % self.valid_interval == 0 and epoch >= self.valid_start_epoch:
                 print(f"Train has finished, Valid is in progress...")
 
                 self.set_model_to_eval_mode()

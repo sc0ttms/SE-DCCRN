@@ -27,7 +27,7 @@ clip_grad_norm_value = 10.0
 name = "ReduceLROnPlateau"
 mode = "min"
 factor = 0.5
-patience = 0
+patience = 5
 verbose = true
 
 [dataloader]
@@ -53,6 +53,7 @@ kernel_size = 5
 [train]
 resume = false
 epochs = 9999
+valid_start_epoch = 300
 valid_interval = 1
 
 [inference]
