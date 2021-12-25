@@ -94,6 +94,8 @@ class BaseTrainer:
             mode=config["lr_scheduler"]["mode"],
             factor=config["lr_scheduler"]["factor"],
             patience=config["lr_scheduler"]["patience"][0],
+            threshold=config["lr_scheduler"]["threshold"],
+            min_lr=config["lr_scheduler"]["min_lr"],
             verbose=config["lr_scheduler"]["verbose"],
         )
 
