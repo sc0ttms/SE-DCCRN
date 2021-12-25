@@ -19,20 +19,18 @@ samples = 2
 save_interval = 1
 
 [optimizer]
-name = "AdamW"
-lr = 1e-6
+name = "Adam"
+lr = 1e-3
 
 [grad]
 clip_grad_norm_value = 10.0
 
 [lr_scheduler]
-name = "CyclicLR"
-base_lr = 1e-6
-max_lr = 1e-3
-step_size_up = 100
-step_size_down = 0
-cycle_momentum = false
-verbose = false
+name = "ReduceLROnPlateau"
+mode = "min"
+factor = 0.5
+patience = [2, 0]
+verbose = true
 
 [dataloader]
 batch_size = [130, 40]
