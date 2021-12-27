@@ -2,6 +2,7 @@
 
 import sys
 import os
+import argparse
 import toml
 from tqdm import tqdm
 import torch
@@ -12,6 +13,7 @@ sys.path.append(os.getcwd())
 from trainer.base_trainer import BaseTrainer
 from dataset.dataset import DNS_Dataset
 from module.dc_crn import DCCRN
+from module.ds_dc_crn import DSDCCRN
 from audio.utils import prepare_empty_path
 
 
@@ -20,6 +22,7 @@ class KnowledgeDistillationTrainer(BaseTrainer):
         super().__init__(config, model, train_iter, valid_iter, device=device)
         # get teacher model
         self.teacher_model = teacher_model
+        self.teacher_model_path = config["path"]["teacher_model"]
         # get knowledge_distillation args
         self.kd_alpha = config["knowledge_distillation"]["alpha"]
 
@@ -30,19 +33,18 @@ class KnowledgeDistillationTrainer(BaseTrainer):
         prepare_empty_path([self.checkpoints_path, self.logs_path], self.resume)
 
         # load teacher model checkpoint
-        self.load_teacher_checkpoint()
+        self.load_teacher_model()
 
         # to device
         self.teacher_model = self.teacher_model.to(self.device)
         # set teacher model to eval
         self.teacher_model.eval()
 
-    def load_teacher_checkpoint(self):
-        checkpoint_path = os.path.join(self.checkpoints_path, "..", "base", "best_checkpoint.tar")
-        assert os.path.exists(checkpoint_path)
-        checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    def load_teacher_model(self):
+        assert os.path.exists(self.teacher_model_path)
+        load_model = torch.load(self.teacher_model_path, map_location="cpu")
 
-        self.teacher_model.load_state_dict(checkpoint["model"])
+        self.teacher_model.load_state_dict(load_model)
 
         print(f"Load teacher model done...")
 
@@ -85,16 +87,20 @@ class KnowledgeDistillationTrainer(BaseTrainer):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="knowledge distillation trainer")
+    parser.add_argument("-TC", "--teacher_config", required=True, type=str, help="Teacher Config (*.toml).")
+    parser.add_argument("-SC", "--student_config", required=True, type=str, help="Student Config (*.toml).")
+    args = parser.parse_args()
+
     # config device
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(device)
 
-    # get config
-    toml_path = os.path.join(os.getcwd(), "config", "base_config.toml")
-    config = toml.load(toml_path)
+    # get teacher config
+    config = toml.load(args.teacher_config)
 
     # config teacher model
-    teacher_model = DCCRN(
+    teacher_model = globals().get(config["model"]["name"])(
         n_fft=config["dataset"]["n_fft"],
         rnn_layers=config["model"]["rnn_layers"],
         rnn_units=config["model"]["rnn_units"],
@@ -103,8 +109,7 @@ if __name__ == "__main__":
     )
 
     # get config
-    toml_path = os.path.join(os.getcwd(), "config", "knowledge_distillation_config.toml")
-    config = toml.load(toml_path)
+    config = toml.load(args.student_config)
 
     # get dataset path
     dataset_path = os.path.join(os.getcwd(), "dataset_csv")
@@ -138,7 +143,7 @@ if __name__ == "__main__":
     )
 
     # config teacher model
-    model = DCCRN(
+    model = globals().get(config["model"]["name"])(
         n_fft=config["dataset"]["n_fft"],
         rnn_layers=config["model"]["rnn_layers"],
         rnn_units=config["model"]["rnn_units"],
