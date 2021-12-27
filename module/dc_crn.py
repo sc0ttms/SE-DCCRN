@@ -5,7 +5,7 @@ import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchinfo import summary
+from thop import profile
 
 sys.path.append(os.getcwd())
 from module.complex_conv2d import ComplexConv2d
@@ -148,9 +148,10 @@ if __name__ == "__main__":
         kernel_size=5,
     )
     # get inputs [B, F, T, 2]
-    X = torch.randn([2, 257, 401, 2])
+    X = torch.randn([1, 257, 401, 2])
     # print network
-    summary(model, input_size=tuple(X.shape))
+    macs, params = profile(model, inputs=(X, ), custom_ops={})
+    print(f"flops {macs / 1e9:.3f} G, params {params / 1e6:.3f} M")
     # forward
     mask = model(X)
 
