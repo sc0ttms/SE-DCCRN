@@ -32,11 +32,11 @@ class KnowledgeDistillationTrainer(BaseTrainer):
         # mkdir path
         prepare_empty_path([self.checkpoints_path, self.logs_path], self.resume)
 
+        # to device
+        self.teacher_model = self.teacher_model.to(self.device)
         # load teacher model checkpoint
         self.load_teacher_model()
 
-        # to device
-        self.teacher_model = self.teacher_model.to(self.device)
         # set teacher model to eval
         self.teacher_model.eval()
 
