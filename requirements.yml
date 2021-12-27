@@ -1,0 +1,12 @@
+# conda install --file .\requirements.yml
+pytorch==1.10.1
+torchvision
+torchaudio
+cpuonly
+torchinfo==1.6.0
+tensorboard==2.7.0
+librosa==0.8.1
+toml==0.10.2
+tqdm==4.62.3
+ipykernel==6.6.0
+joblib==1.1.0
