@@ -21,11 +21,8 @@ from audio.utils import prepare_empty_path
 
 
 class BaseInferencer(BaseTrainer):
-    def __init__(self, config, model_path, model, test_iter, device="cpu"):
+    def __init__(self, config, model, test_iter, device="cpu"):
         super().__init__(config, model, test_iter, test_iter, device=device)
-        # get model path
-        self.model_path = model_path
-
         # init path
         self.output_path = os.path.join(self.base_path, "enhanced", "base")
         self.logs_path = os.path.join(self.base_path, "logs", "inference", "base")
@@ -36,13 +33,7 @@ class BaseInferencer(BaseTrainer):
         # init writer_text_enh_clipped_step
         self.writer_text_enh_clipped_step = 1
 
-        self.load_model()
-
-    def load_model(self):
-        load_model = torch.load(self.model_path, map_location="cpu")
-        self.model.load_state_dict(load_model)
-
-        print(f"Loading model done...")
+        self.load_pre_model()
 
     def check_clipped(self, enh, enh_file):
         if is_clipped(enh):
@@ -165,10 +156,6 @@ if __name__ == "__main__":
     toml_path = os.path.join(os.getcwd(), "config", "base_config.toml")
     config = toml.load(toml_path)
 
-    # get saved model path
-    base_path = config["path"]["base"]
-    model_path = os.path.join(base_path, "checkpoints", "base", "best_model.pth")
-
     # get dataset path
     dataset_path = os.path.join(os.getcwd(), "dataset_csv")
 
@@ -199,7 +186,7 @@ if __name__ == "__main__":
     )
 
     # inferencer
-    inference = BaseInferencer(config,model_path,  model, test_iter, device)
+    inference = BaseInferencer(config,  model, test_iter, device)
 
     # inference
     inference()
