@@ -10,7 +10,7 @@ n_jobs = 8
 # base = "./output/dccrn"
 base = "/model/dccrn"
 pre_model = 0
-# pre_model = "/model/dccrn/checkpoints/latest_model.pth"
+# pre_model = "/model/dccrn/checkpoints/base/latest_model.pth"
 
 [visual]
 samples = 2
@@ -49,6 +49,7 @@ audio_len = 3.0
 limit = 0
 
 [model]
+name = "DCCRN"
 rnn_units = 256
 rnn_layers = 2
 kernel_num = [2, 32, 64, 128, 256, 256, 256]
