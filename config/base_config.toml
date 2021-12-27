@@ -59,6 +59,3 @@ resume = false
 epochs = 9999
 valid_start_epoch = 300
 valid_interval = 1
-
-[inference]
-audio_len = 30.0
