@@ -58,21 +58,21 @@ class KnowledgeDistillationTrainer(BaseTrainer):
             noisy_spec = self.audio_stft(noisy)
 
             self.optimizer.zero_grad()
-            with torch.no_grad():
-                teacher_mask = self.teacher_model(noisy_spec)
-
-            # [B, S]
-            teacher_enh = self.audio_istft(teacher_mask, noisy_spec)
-
             with autocast(enabled=self.use_amp):
                 mask = self.model(noisy_spec)
-
             # [B, S]
             enh = self.audio_istft(mask, noisy_spec)
-
             loss_hard = self.loss(enh, clean)
-            loss_soft = self.loss(enh, teacher_enh)
-            loss = self.kd_alpha * loss_hard + (1.0 - self.kd_alpha) * loss_soft
+            loss = (1.0 - self.kd_alpha) * loss_hard
+
+            if self.kd_alpha:
+                with torch.no_grad():
+                    teacher_mask = self.teacher_model(noisy_spec)
+                # [B, S]
+                teacher_enh = self.audio_istft(teacher_mask, noisy_spec)
+                loss_soft = self.loss(enh, teacher_enh)
+                loss += self.kd_alpha * loss_soft
+
             self.scaler.scale(loss).backward()
             self.scaler.unscale_(self.optimizer)
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_grad_norm_value)
