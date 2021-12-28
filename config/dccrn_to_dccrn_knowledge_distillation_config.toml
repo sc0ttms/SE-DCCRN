@@ -36,7 +36,7 @@ min_lr = 1e-5
 verbose = true
 
 [dataloader]
-batch_size = [80, 30]
+batch_size = [130, 40]
 num_workers = 8
 drop_last = false
 pin_memory = false
@@ -50,17 +50,17 @@ audio_len = 3.0
 limit = 0
 
 [model]
-name = "DSDCCRN"
-rnn_units = 256
+name = "DCCRN"
+rnn_units = 128
 rnn_layers = 2
-kernel_num = [2, 32, 64, 128, 256, 256, 256]
+kernel_num = [2, 16, 32, 64, 128, 128, 128]
 kernel_size = 5
 
 [train]
 resume = false
 epochs = 9999
-valid_start_epoch = 300
+valid_start_epoch = 100
 valid_interval = 1
 
 [knowledge_distillation]
-alpha = 0.1
+alpha = 0.9
