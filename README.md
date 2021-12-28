@@ -17,26 +17,27 @@
 - 数据集
   - [x] [dns_interspeech_2021_mandarin_100h](https://aistudio.baidu.com/aistudio/datasetdetail/119056)
 
-## 参考
+## 相关参考链接
 
-### 论文
+### 复现论文
 
-```text
-@misc{hu2020dccrn,
-      title={DCCRN: Deep Complex Convolution Recurrent Network for Phase-Aware Speech Enhancement}, 
-      author={Yanxin Hu and Yun Liu and Shubo Lv and Mengtao Xing and Shimin Zhang and Yihui Fu and Jian Wu and Bihong Zhang and Lei Xie},
-      year={2020},
-      eprint={2008.00264},
-      archivePrefix={arXiv},
-      primaryClass={eess.AS}
-}
-```
+- [DCCRN: Deep Complex Convolution Recurrent Network for Phase-Aware Speech Enhancement](https://arxiv.org/abs/2008.00264)
+
+### 模型压缩
+
+- 知识蒸馏
+  - [Distilling the Knowledge in a Neural Network](https://arxiv.org/abs/1503.02531)
+- 剪枝
+  - [Pytorch prune tutorial](https://pytorch.org/tutorials/intermediate/pruning_tutorial.html?highlight=prune)
+- 量化
+  - [A White Paper on Neural Network Quantization](https://arxiv.org/abs/2106.08295)
+  - [Pytorch quantization tutorial](https://pytorch.org/docs/stable/quantization.html)
 
 ### 项目
 
-- https://github.com/haoxiangsnr/FullSubNet
-- https://github.com/huyanxin/DeepComplexCRN
+- [FullSubNet](https://github.com/haoxiangsnr/FullSubNet)
+- [DeepComplexCRN](https://github.com/huyanxin/DeepComplexCRN)
 
 ## License
 
-[![License](https://img.shields.io/badge/License-BSD-green)](https://github.com/sc0ttms/SE-DCCRN/blob/main/LICENSE)
+[![License](https://img.shields.io/badge/License-BSD-green)](./LICENSE)
