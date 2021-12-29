@@ -1,4 +1,15 @@
-# pip install -r .\requirements.txt -i http://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com
+pytorch==1.10.1
+torchvision
+torchaudio
+cpuonly
+torchinfo
+tensorboard
+librosa
+pandas
+toml
+tqdm
+ipykernel
+joblib
 pystoi
 pesq
 thop
