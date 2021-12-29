@@ -27,6 +27,7 @@
 
 - 知识蒸馏
   - [Distilling the Knowledge in a Neural Network](https://arxiv.org/abs/1503.02531)
+  - [Learning Efficient Object Detection Models with Knowledge Distillation](http://cseweb.ucsd.edu/~mkchandraker/pdf/nips17_distillationdetection.pdf)
 - 剪枝
   - [Pytorch prune tutorial](https://pytorch.org/tutorials/intermediate/pruning_tutorial.html?highlight=prune)
 - 量化
