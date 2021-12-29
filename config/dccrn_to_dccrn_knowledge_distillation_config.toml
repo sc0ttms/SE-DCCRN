@@ -51,9 +51,9 @@ limit = 0
 
 [model]
 name = "DCCRN"
-rnn_units = 128
+rnn_units = 64
 rnn_layers = 2
-kernel_num = [2, 16, 32, 64, 128, 128, 128]
+kernel_num = [2, 8, 16, 32, 64, 64, 64]
 kernel_size = 5
 
 [train]
@@ -63,4 +63,5 @@ valid_start_epoch = 100
 valid_interval = 1
 
 [knowledge_distillation]
-alpha = 0.9
+margin = 1.05
+v = 0.5

@@ -24,7 +24,8 @@ class KnowledgeDistillationTrainer(BaseTrainer):
         self.teacher_model = teacher_model
         self.teacher_model_path = config["path"]["teacher_model"]
         # get knowledge_distillation args
-        self.kd_alpha = config["knowledge_distillation"]["alpha"]
+        self.margin = config["knowledge_distillation"]["margin"]
+        self.v = config["knowledge_distillation"]["v"]
 
         # reconfig path
         self.checkpoints_path = os.path.join(self.base_path, "checkpoints", "knowledge_distillation")
@@ -48,6 +49,22 @@ class KnowledgeDistillationTrainer(BaseTrainer):
 
         print(f"Load teacher model done...")
 
+    def teacher_bounded_loss(self, teacher_enh, student_enh, clean):
+        """bounded loss
+
+        Args:
+            teacher_enh (torch.tensor): teacher enh audio
+            student_enh (torch.tensor): student enh audio
+
+        References:
+            Learning Efficient Object Detection Models with Knowledge Distillation
+        """
+        teacher_loss = self.loss(teacher_enh, clean)
+        student_loss = self.loss(student_enh, clean)
+        bounded_loss = student_loss if student_loss / teacher_loss < self.margin else 0
+        loss = student_loss + self.v * bounded_loss
+        return loss
+
     def train_epoch(self, epoch):
         loss_total = 0.0
         for noisy, clean in tqdm(self.train_iter, desc="train"):
@@ -58,21 +75,17 @@ class KnowledgeDistillationTrainer(BaseTrainer):
             noisy_spec = self.audio_stft(noisy)
 
             self.optimizer.zero_grad()
+            with torch.no_grad():
+                teacher_mask = self.teacher_model(noisy_spec)
+            # [B, S]
+            teacher_enh = self.audio_istft(teacher_mask, noisy_spec)
+
             with autocast(enabled=self.use_amp):
                 mask = self.model(noisy_spec)
             # [B, S]
             enh = self.audio_istft(mask, noisy_spec)
-            loss_hard = self.loss(enh, clean)
-            loss = (1.0 - self.kd_alpha) * loss_hard
 
-            if self.kd_alpha:
-                with torch.no_grad():
-                    teacher_mask = self.teacher_model(noisy_spec)
-                # [B, S]
-                teacher_enh = self.audio_istft(teacher_mask, noisy_spec)
-                loss_soft = self.loss(enh, teacher_enh)
-                loss += self.kd_alpha * loss_soft
-
+            loss = self.teacher_bounded_loss(teacher_enh, enh, clean)
             self.scaler.scale(loss).backward()
             self.scaler.unscale_(self.optimizer)
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_grad_norm_value)
