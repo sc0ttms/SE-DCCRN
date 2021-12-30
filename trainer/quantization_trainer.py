@@ -2,6 +2,7 @@
 
 import sys
 import os
+import argparse
 import copy
 import toml
 import torch
@@ -17,10 +18,8 @@ from audio.utils import prepare_empty_path
 
 
 class QuantizationTrainer(BaseTrainer):
-    def __init__(self, config, model_path, model, train_iter, valid_iter, device="cpu"):
+    def __init__(self, config, model, train_iter, valid_iter, device="cpu"):
         super().__init__(config, model, train_iter, valid_iter, device=device)
-        # get model path
-        self.model_path = model_path
         # reconfig path
         self.checkpoints_path = os.path.join(self.base_path, "checkpoints", "quantization")
         self.logs_path = os.path.join(self.base_path, "logs", "train", "quantization")
@@ -37,12 +36,7 @@ class QuantizationTrainer(BaseTrainer):
         # set the qengine to control weight packing
         # torch.backends.quantized.engine = "qnnpack"
 
-        # prepare_qat
-        self.prepare_qat()
-
     def prepare_qat(self):
-        load_model = torch.load(self.model_path, map_location="cpu")
-        self.model.load_state_dict(load_model)
         # get graph module
         gm = symbolic_trace(self.model)
         model_to_quantize = copy.deepcopy(gm)
@@ -72,22 +66,61 @@ class QuantizationTrainer(BaseTrainer):
             self.quant_fx()
             torch.save(self.quantized_model.state_dict(), os.path.join(self.checkpoints_path, "quantized_model.pth"))
 
+    def __call__(self):
+        # to device
+        self.model.to(self.device)
+
+        # init pre load model
+        if self.pre_model_path:
+            self.load_pre_model()
+
+        # prepare_qat
+        self.prepare_qat()
+
+        # resume
+        if self.resume:
+            self.resume_checkpoint()
+
+        # init logs
+        self.init_logs()
+
+        # loop train
+        for epoch in range(self.start_epoch, self.epochs + 1):
+            print(f"{'=' * 20} {epoch} epoch start {'=' * 20}")
+
+            self.set_model_to_train_mode()
+            self.train_epoch(epoch)
+
+            if self.save_checkpoint_interval != 0 and (epoch % self.save_checkpoint_interval == 0):
+                self.save_checkpoint(epoch)
+
+            # valid
+            if epoch % self.valid_interval == 0 and epoch >= self.valid_start_epoch:
+                print(f"Train has finished, Valid is in progress...")
+
+                self.set_model_to_eval_mode()
+                metric_score = self.valid_epoch(epoch)
+
+                if self.is_best_epoch(metric_score):
+                    self.save_checkpoint(epoch, is_best_epoch=True)
+
+            print(f"{'=' * 20} {epoch} epoch end {'=' * 20}")
+
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="knowledge distillation trainer")
+    parser.add_argument("-C", "--config", required=True, type=str, help="Config (*.toml).")
+    args = parser.parse_args()
+
     # config device
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(device)
 
     # get config
-    toml_path = os.path.join(os.getcwd(), "config", "base_config.toml")
-    config = toml.load(toml_path)
+    config = toml.load(args.config)
 
     # get dataset path
     dataset_path = os.path.join(os.getcwd(), "dataset_csv")
-
-    # get saved model path
-    base_path = config["path"]["base"]
-    model_path = os.path.join(base_path, "checkpoints", "base", "best_model.pth")
 
     # get dataloader args
     batch_size = config["dataloader"]["batch_size"]
@@ -118,7 +151,7 @@ if __name__ == "__main__":
     )
 
     # config teacher model
-    model = DCCRN(
+    model = globals().get(config["model"]["name"])(
         n_fft=config["dataset"]["n_fft"],
         rnn_layers=config["model"]["rnn_layers"],
         rnn_units=config["model"]["rnn_units"],
@@ -127,7 +160,7 @@ if __name__ == "__main__":
     )
 
     # trainer
-    trainer = QuantizationTrainer(config, model_path, model, train_iter, valid_iter, device)
+    trainer = QuantizationTrainer(config, model, train_iter, valid_iter, device)
 
     # train
     trainer()
