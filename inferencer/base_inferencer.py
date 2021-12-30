@@ -2,6 +2,7 @@
 
 import sys
 import os
+import argparse
 import toml
 import pandas as pd
 import soundfile as sf
@@ -148,13 +149,16 @@ class BaseInferencer(BaseTrainer):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="knowledge distillation trainer")
+    parser.add_argument("-C", "--config", required=True, type=str, help="Config (*.toml).")
+    args = parser.parse_args()
+
     # config device
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(device)
 
     # get config
-    toml_path = os.path.join(os.getcwd(), "config", "base_config.toml")
-    config = toml.load(toml_path)
+    config = toml.load(args.config)
 
     # get dataset path
     dataset_path = os.path.join(os.getcwd(), "dataset_csv")
@@ -177,7 +181,7 @@ if __name__ == "__main__":
     )
 
     # config model
-    model = DCCRN(
+    model = globals().get(config["model"]["name"])(
         n_fft=config["dataset"]["n_fft"],
         rnn_layers=config["model"]["rnn_layers"],
         rnn_units=config["model"]["rnn_units"],
