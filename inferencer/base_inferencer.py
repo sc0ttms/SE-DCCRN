@@ -34,8 +34,6 @@ class BaseInferencer(BaseTrainer):
         # init writer_text_enh_clipped_step
         self.writer_text_enh_clipped_step = 1
 
-        self.load_pre_model()
-
     def check_clipped(self, enh, enh_file):
         if is_clipped(enh):
             self.writer.add_text(
@@ -142,6 +140,8 @@ class BaseInferencer(BaseTrainer):
 
         # to device
         self.model = self.model.to(self.device)
+        # load model
+        self.load_pre_model()
 
         # set to eval
         self.set_model_to_eval_mode()
