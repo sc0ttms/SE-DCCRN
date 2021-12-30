@@ -1,0 +1,62 @@
+[meta]
+use_cudnn = false
+use_amp = true
+
+[ppl]
+n_folds = 1
+n_jobs = 8
+
+[path]
+# base = "./output/dccrn"
+base = "/model/dccrn"
+pre_model = 0
+# pre_model = "/model/dccrn/checkpoints/base/latest_model.pth"
+
+[visual]
+samples = 2
+
+[checkpoint]
+save_interval = 1
+
+[optimizer]
+name = "Adam"
+lr = 1e-3
+
+[grad]
+clip_grad_norm_value = 10.0
+
+[lr_scheduler]
+name = "ReduceLROnPlateau"
+mode = "min"
+factor = 0.5
+patience = 1
+threshold = 1e-3
+min_lr = 1e-5
+verbose = true
+
+[dataloader]
+batch_size = [130, 40]
+num_workers = 8
+drop_last = false
+pin_memory = false
+
+[dataset]
+sr = 16000
+n_fft = 512
+win_len = 480
+hop_len = 120
+audio_len = 3.0
+limit = 0
+
+[model]
+name = "DCCRN"
+rnn_units = 128
+rnn_layers = 2
+kernel_num = [2, 16, 32, 64, 128, 128, 128]
+kernel_size = 5
+
+[train]
+resume = false
+epochs = 9999
+valid_start_epoch = 200
+valid_interval = 5
