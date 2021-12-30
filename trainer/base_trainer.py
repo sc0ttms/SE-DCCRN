@@ -111,6 +111,8 @@ class BaseTrainer:
         load_model = torch.load(self.pre_model_path, map_location="cpu")
         self.model.load_state_dict(load_model)
 
+        print(f"Load pre model done...")
+
     def init_logs(self):
         # init logs
         self.writer = SummaryWriter(
