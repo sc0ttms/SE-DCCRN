@@ -9,9 +9,8 @@ n_jobs = 8
 [path]
 # base = "./output/dccrn"
 base = "/model/dccrn"
-teacher_model = "/code/backup/dccrn_base_model.pth"
 pre_model = 0
-# pre_model = "/code/backup/dccrn_base_model.pth"
+# pre_model = "/code/backup/lite_v1_model.pth"
 
 [visual]
 samples = 2
@@ -59,8 +58,11 @@ kernel_size = 5
 [train]
 resume = false
 epochs = 9999
-valid_start_epoch = 300
-valid_interval = 1
+valid_start_epoch = 200
+valid_interval = 5
 
 [knowledge_distillation]
-alpha = 0.1
+teacher_model = "/code/backup/base_model.pth"
+# student_model, use pre_model
+margin = 1.05
+v = 0.5

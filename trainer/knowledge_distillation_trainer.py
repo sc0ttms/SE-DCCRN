@@ -22,8 +22,8 @@ class KnowledgeDistillationTrainer(BaseTrainer):
         super().__init__(config, model, train_iter, valid_iter, device=device)
         # get teacher model
         self.teacher_model = teacher_model
-        self.teacher_model_path = config["path"]["teacher_model"]
         # get knowledge_distillation args
+        self.teacher_model_path = config["knowledge_distillation"]["teacher_model"]
         self.margin = config["knowledge_distillation"]["margin"]
         self.v = config["knowledge_distillation"]["v"]
 
@@ -35,7 +35,7 @@ class KnowledgeDistillationTrainer(BaseTrainer):
 
         # to device
         self.teacher_model = self.teacher_model.to(self.device)
-        # load teacher model checkpoint
+        # load teacher model
         self.load_teacher_model()
 
         # set teacher model to eval
