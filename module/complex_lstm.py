@@ -26,10 +26,6 @@ class ComplexLSTM(nn.Module):
         else:
             self.projection_size = None
 
-    def flatten_parameters(self):
-        self.lstm_real.flatten_parameters()
-        self.lstm_imag.flatten_parameters()
-
     def forward(self, input):
         # [B, C, F, T]
         [batch_size, num_channels, num_freqs, num_frames] = input.shape

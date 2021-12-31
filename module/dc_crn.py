@@ -11,6 +11,7 @@ sys.path.append(os.getcwd())
 from module.complex_conv2d import ComplexConv2d
 from module.complex_lstm import ComplexLSTM
 from module.complex_conv_transpose2d import ComplexConvTranspose2d
+from audio.utils import flatten_parameters
 
 
 class DCCRN(nn.Module):
@@ -92,12 +93,8 @@ class DCCRN(nn.Module):
                     )
                 )
 
-        # set LSTM params
-        self.flatten_parameters()
-
-    def flatten_parameters(self):
-        if isinstance(self.rnn, nn.LSTM):
-            self.rnn.flatten_parameters()
+        # flatten_parameters
+        self.apply(flatten_parameters)
 
     @staticmethod
     def skip_connect(decoder_in, encoder_out):
