@@ -46,10 +46,12 @@ class QuantizationTrainer(BaseTrainer):
         self.model.apply(flatten_parameters)
 
     def quant_fx(self):
+        print(f"Quant Fx Start...")
         self.prepare_qat()
         self.load_pre_model()
         self.quantized_model = quantize_fx.convert_fx(self.model)
         torch.save(self.quantized_model.state_dict(), os.path.join(self.checkpoints_path, "quantized_model.pth"))
+        print(f"Quant Fx End... Please check path {self.checkpoints_path}/quantized_model.pth")
 
     def __call__(self):
         # to device
