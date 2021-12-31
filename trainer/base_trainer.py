@@ -285,6 +285,9 @@ class BaseTrainer:
 
             loss_total += loss.item()
 
+        # # update learning rate
+        self.update_scheduler(loss_total / len(self.train_iter))
+
         # logs
         self.writer.add_scalar("loss/train", loss_total / len(self.train_iter), epoch)
         self.writer.add_scalar("lr", self.optimizer.state_dict()["param_groups"][0]["lr"], epoch)
@@ -335,8 +338,8 @@ class BaseTrainer:
             enh_list, clean_list, epoch, n_folds=self.n_folds, n_jobs=self.n_jobs
         )
 
-        # update learning rate
-        self.update_scheduler(loss_total / len(self.valid_iter))
+        # # update learning rate
+        # self.update_scheduler(loss_total / len(self.valid_iter))
 
         return metrics_score
 
