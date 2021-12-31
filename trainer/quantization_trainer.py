@@ -6,6 +6,7 @@ import argparse
 import copy
 import toml
 import torch
+import torch.nn as nn 
 import torch.quantization.quantize_fx as quantize_fx
 from torch.fx import symbolic_trace
 from torch.utils.data import DataLoader
@@ -14,7 +15,7 @@ sys.path.append(os.getcwd())
 from trainer.base_trainer import BaseTrainer
 from dataset.dataset import DNS_Dataset
 from module.dc_crn import DCCRN
-from audio.utils import prepare_empty_path
+from audio.utils import prepare_empty_path, flatten_parameters
 
 
 class QuantizationTrainer(BaseTrainer):
@@ -41,6 +42,7 @@ class QuantizationTrainer(BaseTrainer):
         gm = symbolic_trace(self.model)
         model_to_quantize = copy.deepcopy(gm)
         self.model = quantize_fx.prepare_qat_fx(model_to_quantize, self.qconfig_dict)
+        self.model.apply(flatten_parameters)
 
     def quant_fx(self):
         prepare_qat_model = copy.deepcopy(self.model)

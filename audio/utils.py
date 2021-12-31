@@ -3,6 +3,7 @@
 import os
 import zipfile
 import torch
+import torch.nn as nn
 from tqdm import tqdm
 
 
@@ -75,3 +76,8 @@ def print_networks(models: list):
         params_of_all_networks += params_of_network
 
     print(f"The amount of parameters in the project is {params_of_all_networks / 1e6} million.")
+
+
+def flatten_parameters(m):
+    if isinstance(m, nn.LSTM):
+        m.flatten_parameters()
