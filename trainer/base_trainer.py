@@ -20,6 +20,7 @@ from module.dc_crn import DCCRN
 from dataset.compute_metrics import compute_metric
 from audio.utils import prepare_empty_path, print_networks
 from audio.metrics import SI_SDR, transform_pesq_range
+from audio.feature import EPS
 
 plt.switch_backend("agg")
 
@@ -236,8 +237,15 @@ class BaseTrainer:
     def audio_istft(self, mask, spec):
         # mask [B, 2, F, T]
         # spec [B, F, T, 2]
-        spec_real = mask[:, 0, :, :] * spec[:, :, :, 0] + (-mask[:, 1, :, :] * spec[:, :, :, 1])
-        spec_imag = mask[:, 1, :, :] * spec[:, :, :, 0] + mask[:, 0, :, :] * spec[:, :, :, 1]
+        mask_mags = (mask[:, 0, :, :] ** 2 + mask[:, 1, :, :] ** 2) ** 0.5
+        phase_real = mask[:, 0, :, :] / (mask_mags + EPS)
+        phase_imag = mask[:, 1, :, :] / (mask_mags + EPS)
+        mask_phase = torch.atan2(phase_imag, phase_real)
+        mask_mags = torch.tanh(mask_mags)
+        enh_mags = mask_mags*torch.abs(spec) 
+        enh_phase = torch.atan2(spec[:, 1, :, :], spec[:, 0, :, :]) + mask_phase
+        spec_real = enh_mags*torch.cos(enh_phase)
+        spec_imag = enh_mags*torch.sin(enh_phase) 
         # [B, F, T]
         cspec = spec_real + 1j * spec_imag
         # [B, S]
