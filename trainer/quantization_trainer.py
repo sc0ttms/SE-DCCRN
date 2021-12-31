@@ -21,6 +21,8 @@ from audio.utils import prepare_empty_path, flatten_parameters
 class QuantizationTrainer(BaseTrainer):
     def __init__(self, config, model, train_iter, valid_iter, device="cpu"):
         super().__init__(config, model, train_iter, valid_iter, device=device)
+        # reconfig use_amp
+        self.use_amp = False
         # reconfig path
         self.checkpoints_path = os.path.join(self.base_path, "checkpoints", "quantization")
         self.logs_path = os.path.join(self.base_path, "logs", "train", "quantization")
