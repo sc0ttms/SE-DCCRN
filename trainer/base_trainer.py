@@ -242,10 +242,10 @@ class BaseTrainer:
         phase_imag = mask[:, 1, :, :] / (mask_mags + EPS)
         mask_phase = torch.atan2(phase_imag, phase_real)
         mask_mags = torch.tanh(mask_mags)
-        enh_mags = mask_mags*torch.abs(spec) 
-        enh_phase = torch.atan2(spec[:, 1, :, :], spec[:, 0, :, :]) + mask_phase
-        spec_real = enh_mags*torch.cos(enh_phase)
-        spec_imag = enh_mags*torch.sin(enh_phase) 
+        enh_mags = mask_mags * torch.sqrt(spec[:, :, :, 0] ** 2 + spec[:, :, :, 1] ** 2)
+        enh_phase = torch.atan2(spec[:, :, :, 1], spec[:, :, :, 0]) + mask_phase
+        spec_real = enh_mags * torch.cos(enh_phase)
+        spec_imag = enh_mags * torch.sin(enh_phase)
         # [B, F, T]
         cspec = spec_real + 1j * spec_imag
         # [B, S]
