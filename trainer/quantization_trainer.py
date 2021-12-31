@@ -42,33 +42,14 @@ class QuantizationTrainer(BaseTrainer):
     def prepare_qat(self):
         # get graph module
         gm = symbolic_trace(self.model)
-        model_to_quantize = copy.deepcopy(gm)
-        self.model = quantize_fx.prepare_qat_fx(model_to_quantize, self.qconfig_dict)
+        self.model = quantize_fx.prepare_qat_fx(gm, self.qconfig_dict)
         self.model.apply(flatten_parameters)
 
     def quant_fx(self):
-        prepare_qat_model = copy.deepcopy(self.model)
-        self.quantized_model = quantize_fx.convert_fx(prepare_qat_model)
-
-    def save_checkpoint(self, epoch, is_best_epoch=False):
-        print(f"Saving {epoch} epoch checkpoint, {is_best_epoch} best checkpoint...")
-
-        state_dict = {
-            "epoch": epoch,
-            "best_score": self.best_score,
-            "model": self.model.state_dict(),
-            "scheduler": self.scheduler.state_dict(),
-            "optimizer": self.optimizer.state_dict(),
-            "scaler": self.scaler.state_dict(),
-        }
-
-        checkpoint_name_prefix = "best" if is_best_epoch else "latest"
-        torch.save(state_dict, os.path.join(self.checkpoints_path, checkpoint_name_prefix + "_checkpoint.tar"))
-        torch.save(state_dict["model"], os.path.join(self.checkpoints_path, checkpoint_name_prefix + "_model.pth"))
-
-        if is_best_epoch:
-            self.quant_fx()
-            torch.save(self.quantized_model.state_dict(), os.path.join(self.checkpoints_path, "quantized_model.pth"))
+        self.prepare_qat()
+        self.load_pre_model()
+        self.quantized_model = quantize_fx.convert_fx(self.model)
+        torch.save(self.quantized_model.state_dict(), os.path.join(self.checkpoints_path, "quantized_model.pth"))
 
     def __call__(self):
         # to device
@@ -112,8 +93,9 @@ class QuantizationTrainer(BaseTrainer):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="knowledge distillation trainer")
+    parser = argparse.ArgumentParser(description="quantization trainer")
     parser.add_argument("-C", "--config", required=True, type=str, help="Config (*.toml).")
+    parser.add_argument("-FX", "--fx", required=False, type=bool, default=False, help="Quant Fx.")
     args = parser.parse_args()
 
     # config device
@@ -166,7 +148,11 @@ if __name__ == "__main__":
     # trainer
     trainer = QuantizationTrainer(config, model, train_iter, valid_iter, device)
 
-    # train
-    trainer()
+    if args.fx:
+        # fx
+        trainer.quant_fx()
+    else:
+        # train
+        trainer()
 
     pass
