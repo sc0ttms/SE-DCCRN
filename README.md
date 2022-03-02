@@ -1,8 +1,8 @@
 # README
 
 ![Platform](https://img.shields.io/badge/Platform-win10--64-lightgrey)
-![Python](https://img.shields.io/badge/Python-3.7-orange)
-![Pytorch](https://img.shields.io/badge/Pytoch-1.10.1-orange)
+![Python](https://img.shields.io/badge/Python-3.7.5-orange)
+![Pytorch](https://img.shields.io/badge/Pytoch-1.10.2-orange)
 
 ## 项目简介
 
